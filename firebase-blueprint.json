@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Private user information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user" },
+        "email": { "type": "string", "description": "User's email address" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "User's role in the app" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Public user profile for the leaderboard",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "description": "URL to user's profile picture" },
+        "totalPoints": { "type": "number", "description": "Total points earned by the user" }
+      },
+      "required": ["uid", "displayName", "totalPoints"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A football match in the tournament",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the match" },
+        "homeTeam": { "type": "string", "description": "Name of the home team" },
+        "awayTeam": { "type": "string", "description": "Name of the away team" },
+        "date": { "type": "string", "format": "date-time", "description": "Date and time of the match" },
+        "homeScore": { "type": "number", "description": "Actual home team score (null if not played)" },
+        "awayScore": { "type": "number", "description": "Actual away team score (null if not played)" },
+        "status": { "type": "string", "enum": ["scheduled", "finished"], "description": "Current status of the match" }
+      },
+      "required": ["id", "homeTeam", "awayTeam", "date", "status"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "A user's prediction for a specific match",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the prediction" },
+        "userId": { "type": "string", "description": "ID of the user who made the prediction" },
+        "matchId": { "type": "string", "description": "ID of the match being predicted" },
+        "homeScore": { "type": "number", "description": "Predicted home team score" },
+        "awayScore": { "type": "number", "description": "Predicted away team score" },
+        "pointsEarned": { "type": "number", "description": "Points earned for this prediction (calculated after match)" }
+      },
+      "required": ["id", "userId", "matchId", "homeScore", "awayScore"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "Collection of private user information" },
+    "/profiles/{userId}": { "schema": "Profile", "description": "Collection of public user profiles for the leaderboard" },
+    "/matches/{matchId}": { "schema": "Match", "description": "Collection of tournament matches" },
+    "/predictions/{predictionId}": { "schema": "Prediction", "description": "Collection of user predictions" }
+  }
+}

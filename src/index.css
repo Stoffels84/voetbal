@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --color-delijn-yellow: #FFD200;
+  --color-delijn-black: #1A1A1A;
+}
