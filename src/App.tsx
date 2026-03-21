@@ -45,11 +45,24 @@ import {
   UserPlus,
   ArrowRight,
   Info,
-  ShieldCheck
+  ShieldCheck,
+  MessageSquare,
+  HelpCircle,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Send,
+  Timer,
+  Camera
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Match, Prediction, UserProfile, UserPrivate } from './types';
+import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Message } from './types';
+import { 
+  addDoc,
+  serverTimestamp,
+  increment
+} from 'firebase/firestore';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -99,11 +112,14 @@ function AppContent() {
   const [user, setUser] = useState<UserPrivate | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings'>('predictions');
   
   const [matches, setMatches] = useState<Match[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [leaderboard, setLeaderboard] = useState<UserProfile[]>([]);
+  const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([]);
+  const [bonusAnswers, setBonusAnswers] = useState<BonusAnswer[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   // Auth form state
   const [isRegistering, setIsRegistering] = useState(false);
@@ -134,7 +150,7 @@ function AppContent() {
             userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              role: firebaseUser.email === '29076@delijn.be' ? 'admin' : 'user'
+              role: firebaseUser.email === 'christoffrotty84@gmail.com' ? 'admin' : 'user'
             };
             try {
               await setDoc(userDocRef, userData);
@@ -144,7 +160,7 @@ function AppContent() {
           } else if (userDoc) {
             userData = userDoc.data() as UserPrivate;
             // Force admin role if email matches but role is not admin
-            if (firebaseUser.email === '29076@delijn.be' && userData.role !== 'admin') {
+            if (firebaseUser.email === 'christoffrotty84@gmail.com' && userData.role !== 'admin') {
               userData.role = 'admin';
               try {
                 await updateDoc(userDocRef, { role: 'admin' });
@@ -222,10 +238,37 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'profiles')
     );
 
+    const bonusQuestionsUnsubscribe = onSnapshot(
+      query(collection(db, 'bonusQuestions'), orderBy('deadline', 'asc')),
+      (snapshot) => {
+        setBonusQuestions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BonusQuestion)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'bonusQuestions')
+    );
+
+    const bonusAnswersUnsubscribe = onSnapshot(
+      query(collection(db, 'bonusAnswers'), where('userId', '==', user.uid)),
+      (snapshot) => {
+        setBonusAnswers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BonusAnswer)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'bonusAnswers')
+    );
+
+    const messagesUnsubscribe = onSnapshot(
+      query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(50)),
+      (snapshot) => {
+        setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message)).reverse());
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'messages')
+    );
+
     return () => {
       matchesUnsubscribe();
       predictionsUnsubscribe();
       leaderboardUnsubscribe();
+      bonusQuestionsUnsubscribe();
+      bonusAnswersUnsubscribe();
+      messagesUnsubscribe();
     };
   }, [user]);
 
@@ -420,13 +463,22 @@ function AppContent() {
               <p className="text-sm font-bold">{profile?.displayName}</p>
               <p className="text-xs text-stone-500 font-semibold">{profile?.totalPoints} punten</p>
             </div>
-            {profile?.photoURL ? (
+            {profile?.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-stone-100" />
+            ) : profile?.photoURL ? (
               <img src={profile.photoURL} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-stone-100" referrerPolicy="no-referrer" />
             ) : (
               <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center">
                 <UserIcon size={20} className="text-stone-500" />
               </div>
             )}
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={cn("p-2 transition-colors", activeTab === 'settings' ? "text-delijn-black" : "text-stone-400 hover:text-delijn-black")}
+              title="Instellingen"
+            >
+              <Settings size={20} />
+            </button>
             <button 
               onClick={handleLogout}
               className="p-2 text-stone-400 hover:text-red-600 transition-colors"
@@ -438,18 +490,30 @@ function AppContent() {
         </div>
 
         {/* Tabs */}
-        <nav className="max-w-4xl mx-auto px-4 flex border-t border-stone-100">
+        <nav className="max-w-4xl mx-auto px-4 flex border-t border-stone-100 overflow-x-auto no-scrollbar">
           <TabButton 
             active={activeTab === 'predictions'} 
             onClick={() => setActiveTab('predictions')}
             icon={<Calendar size={18} />}
-            label="Voorspellingen"
+            label="Pronos"
           />
           <TabButton 
             active={activeTab === 'leaderboard'} 
             onClick={() => setActiveTab('leaderboard')}
             icon={<Trophy size={18} />}
             label="Klassement"
+          />
+          <TabButton 
+            active={activeTab === 'bonus'} 
+            onClick={() => setActiveTab('bonus')}
+            icon={<HelpCircle size={18} />}
+            label="Bonus"
+          />
+          <TabButton 
+            active={activeTab === 'chat'} 
+            onClick={() => setActiveTab('chat')}
+            icon={<MessageSquare size={18} />}
+            label="Chat"
           />
           <TabButton 
             active={activeTab === 'rules'} 
@@ -461,7 +525,7 @@ function AppContent() {
             <TabButton 
               active={activeTab === 'admin'} 
               onClick={() => setActiveTab('admin')}
-              icon={<Settings size={18} />}
+              icon={<ShieldCheck size={18} />}
               label="Beheer"
             />
           )}
@@ -469,17 +533,28 @@ function AppContent() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        <CountdownTimer matches={matches} />
+
         {activeTab === 'predictions' && (
           <PredictionsView matches={matches} predictions={predictions} userId={user.uid} />
         )}
         {activeTab === 'leaderboard' && (
           <LeaderboardView leaderboard={leaderboard} currentUserId={user.uid} />
         )}
+        {activeTab === 'bonus' && (
+          <BonusQuestionsView questions={bonusQuestions} answers={bonusAnswers} userId={user.uid} />
+        )}
+        {activeTab === 'chat' && (
+          <ChatBox messages={messages} user={user} profile={profile} />
+        )}
         {activeTab === 'rules' && (
           <RulesView />
         )}
+        {activeTab === 'settings' && (
+          <SettingsView profile={profile} user={user} />
+        )}
         {activeTab === 'admin' && user.role === 'admin' && (
-          <AdminView matches={matches} />
+          <AdminView matches={matches} bonusQuestions={bonusQuestions} />
         )}
       </main>
     </div>
@@ -726,50 +801,74 @@ function RulesView() {
 function LeaderboardView({ leaderboard, currentUserId }: { leaderboard: UserProfile[]; currentUserId: string }) {
   return (
     <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-      <div className="p-6 border-b border-stone-100 bg-stone-50/50">
+      <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
         <h2 className="text-xl font-bold">Top Voorspellers</h2>
+        <div className="flex items-center gap-2 text-xs text-stone-400 font-bold uppercase tracking-widest">
+          <TrendingUp size={14} className="text-green-500" />
+          <span>Vorm</span>
+        </div>
       </div>
       <div className="divide-y divide-stone-100">
         {leaderboard.length === 0 ? (
           <div className="p-10 text-center text-stone-400">Nog geen scores beschikbaar.</div>
         ) : (
-          leaderboard.map((entry, index) => (
-            <div 
-              key={entry.uid} 
-              className={cn(
-                "flex items-center gap-4 p-4 transition-colors",
-                entry.uid === currentUserId ? "bg-delijn-yellow/10" : "hover:bg-stone-50"
-              )}
-            >
-              <div className="w-8 text-center font-bold text-stone-400">
-                {index + 1}
-              </div>
-              {entry.photoURL ? (
-                <img src={entry.photoURL} alt="" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center">
-                  <UserIcon size={18} className="text-stone-500" />
+          leaderboard.map((entry, index) => {
+            const rank = index + 1;
+            const prevRank = entry.previousRank;
+            let rankIcon = <Minus size={14} className="text-stone-300" />;
+            
+            if (prevRank) {
+              if (rank < prevRank) rankIcon = <TrendingUp size={14} className="text-green-500" />;
+              else if (rank > prevRank) rankIcon = <TrendingDown size={14} className="text-red-500" />;
+            }
+
+            return (
+              <div 
+                key={entry.uid} 
+                className={cn(
+                  "flex items-center gap-4 p-4 transition-colors",
+                  entry.uid === currentUserId ? "bg-delijn-yellow/10" : "hover:bg-stone-50"
+                )}
+              >
+                <div className="w-8 flex flex-col items-center">
+                  <span className="font-bold text-stone-400">{rank}</span>
+                  {rankIcon}
                 </div>
-              )}
-              <div className="flex-1">
-                <p className="font-bold text-delijn-black">
-                  {entry.displayName}
-                  {entry.uid === currentUserId && <span className="ml-2 text-[10px] bg-delijn-black text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Jij</span>}
-                </p>
+                {entry.avatarUrl ? (
+                  <img src={entry.avatarUrl} alt="" className="w-10 h-10 rounded-full border border-stone-100" />
+                ) : entry.photoURL ? (
+                  <img src={entry.photoURL} alt="" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center">
+                    <UserIcon size={18} className="text-stone-500" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-delijn-black">{entry.displayName}</p>
+                    {entry.favoriteTeam && (
+                      <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">
+                        {entry.favoriteTeam}
+                      </span>
+                    )}
+                  </div>
+                  {entry.uid === currentUserId && <span className="text-[10px] bg-delijn-black text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Jij</span>}
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-black text-delijn-black">{entry.totalPoints}</p>
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Punten</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-delijn-black">{entry.totalPoints}</p>
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Punten</p>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function AdminView({ matches }: { matches: Match[] }) {
+function AdminView({ matches, bonusQuestions }: { matches: Match[]; bonusQuestions: BonusQuestion[] }) {
+  const [adminTab, setAdminTab] = useState<'matches' | 'bonus'>('matches');
   const [isAdding, setIsAdding] = useState(false);
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
@@ -957,105 +1056,133 @@ function AdminView({ matches }: { matches: Match[] }) {
       }
     });
   };
-
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold">Wedstrijdbeheer</h2>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleRecalculateAll}
-            disabled={saving}
-            className="flex items-center gap-2 bg-stone-100 text-stone-600 px-4 py-2 rounded-xl font-bold hover:bg-stone-200 transition-all disabled:opacity-50"
-            title="Herbereken alle scores voor alle gebruikers"
-          >
-            <Trophy size={18} />
-            Herbereken Alles
-          </button>
-          <button 
-            onClick={() => setIsAdding(!isAdding)}
-            className="flex items-center gap-2 bg-delijn-yellow text-delijn-black px-4 py-2 rounded-xl font-bold hover:bg-yellow-500 transition-all"
-          >
-            <Plus size={20} />
-            Nieuwe Match
-          </button>
-        </div>
+      <div className="flex gap-4 mb-8">
+        <button 
+          onClick={() => setAdminTab('matches')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+            adminTab === 'matches' ? "bg-delijn-black text-white" : "bg-white text-stone-500 border border-stone-200"
+          )}
+        >
+          <Calendar size={18} />
+          Wedstrijden
+        </button>
+        <button 
+          onClick={() => setAdminTab('bonus')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+            adminTab === 'bonus' ? "bg-delijn-black text-white" : "bg-white text-stone-500 border border-stone-200"
+          )}
+        >
+          <HelpCircle size={18} />
+          Bonusvragen
+        </button>
       </div>
 
-      {success && (
-        <div className="bg-delijn-yellow/10 border border-delijn-yellow/20 text-delijn-black p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
-          <CheckCircle2 size={20} />
-          <p className="font-bold">{success}</p>
-        </div>
-      )}
-
-      {confirmAction && (
-        <ConfirmationModal 
-          title={confirmAction.title}
-          message={confirmAction.message}
-          onConfirm={confirmAction.onConfirm}
-          onCancel={() => setConfirmAction(null)}
-        />
-      )}
-
-      {isAdding && (
-        <form onSubmit={handleAddMatch} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-lg animate-in fade-in slide-in-from-top-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Thuisploeg</label>
-              <input 
-                required
-                value={homeTeam}
-                onChange={e => setHomeTeam(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
-                placeholder="Bijv. België"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Uitploeg</label>
-              <input 
-                required
-                value={awayTeam}
-                onChange={e => setAwayTeam(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
-                placeholder="Bijv. Frankrijk"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Datum & Tijd</label>
-              <input 
-                required
-                type="datetime-local"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
-              />
+      {adminTab === 'matches' ? (
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold">Wedstrijdbeheer</h2>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleRecalculateAll}
+                disabled={saving}
+                className="flex items-center gap-2 bg-stone-100 text-stone-600 px-4 py-2 rounded-xl font-bold hover:bg-stone-200 transition-all disabled:opacity-50"
+                title="Herbereken alle scores voor alle gebruikers"
+              >
+                <Trophy size={18} />
+                Herbereken Alles
+              </button>
+              <button 
+                onClick={() => setIsAdding(!isAdding)}
+                className="flex items-center gap-2 bg-delijn-yellow text-delijn-black px-4 py-2 rounded-xl font-bold hover:bg-yellow-500 transition-all"
+              >
+                <Plus size={20} />
+                Nieuwe Match
+              </button>
             </div>
           </div>
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-stone-500 font-bold">Annuleren</button>
-            <button 
-              type="submit" 
-              disabled={saving}
-              className="bg-delijn-black text-white px-6 py-2 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
-            >
-              {saving ? 'Opslaan...' : 'Toevoegen'}
-            </button>
-          </div>
-        </form>
-      )}
 
-      <div className="grid gap-4">
-        {matches.map(match => (
-          <AdminMatchCard 
-            key={match.id} 
-            match={match} 
-            onUpdate={handleUpdateResult} 
-            onDelete={handleDeleteMatch}
-            onReset={handleResetMatch}
-          />
-        ))}
-      </div>
+          {success && (
+            <div className="bg-delijn-yellow/10 border border-delijn-yellow/20 text-delijn-black p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
+              <CheckCircle2 size={20} />
+              <p className="font-bold">{success}</p>
+            </div>
+          )}
+
+          {confirmAction && (
+            <ConfirmationModal 
+              title={confirmAction.title}
+              message={confirmAction.message}
+              onConfirm={confirmAction.onConfirm}
+              onCancel={() => setConfirmAction(null)}
+            />
+          )}
+
+          {isAdding && (
+            <form onSubmit={handleAddMatch} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-lg animate-in fade-in slide-in-from-top-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Thuisploeg</label>
+                  <input 
+                    required
+                    value={homeTeam}
+                    onChange={e => setHomeTeam(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                    placeholder="Bijv. België"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Uitploeg</label>
+                  <input 
+                    required
+                    value={awayTeam}
+                    onChange={e => setAwayTeam(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                    placeholder="Bijv. Frankrijk"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Datum & Tijd</label>
+                  <input 
+                    required
+                    type="datetime-local"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-stone-500 font-bold">Annuleren</button>
+                <button 
+                  type="submit" 
+                  disabled={saving}
+                  className="bg-delijn-black text-white px-6 py-2 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
+                >
+                  {saving ? 'Opslaan...' : 'Toevoegen'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="grid gap-4">
+            {matches.map(match => (
+              <AdminMatchCard 
+                key={match.id} 
+                match={match} 
+                onUpdate={handleUpdateResult}
+                onDelete={handleDeleteMatch}
+                onReset={handleResetMatch}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <AdminBonusQuestionsView questions={bonusQuestions} />
+      )}
     </div>
   );
 }
@@ -1139,6 +1266,503 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="bg-white p-12 rounded-3xl border border-dashed border-stone-300 text-center">
       <p className="text-stone-400 font-medium">{message}</p>
+    </div>
+  );
+}
+
+function CountdownTimer({ matches }: { matches: Match[] }) {
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+  const [nextMatch, setNextMatch] = useState<Match | null>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const upcoming = matches
+        .filter(m => m.status === 'scheduled' && new Date(m.date).getTime() > now)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      if (upcoming.length > 0) {
+        const next = upcoming[0];
+        setNextMatch(next);
+        const distance = new Date(next.date).getTime() - now;
+
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        setTimeLeft(`${days}d ${hours}u ${minutes}m ${seconds}s`);
+      } else {
+        setTimeLeft(null);
+        setNextMatch(null);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [matches]);
+
+  if (!timeLeft || !nextMatch) return null;
+
+  return (
+    <div className="bg-delijn-black text-white p-4 rounded-3xl mb-8 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-500">
+      <div className="flex items-center gap-3">
+        <div className="bg-delijn-yellow/20 p-2 rounded-xl">
+          <Timer className="text-delijn-yellow" size={20} />
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Volgende wedstrijd</p>
+          <p className="font-bold text-sm">{nextMatch.homeTeam} vs {nextMatch.awayTeam}</p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Aftellen</p>
+        <p className="font-mono font-bold text-delijn-yellow">{timeLeft}</p>
+      </div>
+    </div>
+  );
+}
+
+function ChatBox({ messages, user, profile }: { messages: Message[]; user: UserPrivate; profile: UserProfile | null }) {
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || sending) return;
+
+    setSending(true);
+    try {
+      await addDoc(collection(db, 'messages'), {
+        userId: user.uid,
+        userName: profile?.displayName || 'Anoniem',
+        text: newMessage.trim(),
+        timestamp: serverTimestamp(),
+        avatarUrl: profile?.avatarUrl || null
+      });
+      setNewMessage('');
+    } catch (error) {
+      console.error("Error sending message:", error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
+      <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <MessageSquare className="text-delijn-black" size={24} />
+          Berichtenmuur
+        </h2>
+      </div>
+      
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+        {messages.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-stone-400 italic">
+            Nog geen berichten. Wees de eerste!
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <div key={msg.id} className={cn("flex flex-col", msg.userId === user.uid ? "items-end" : "items-start")}>
+              <div className={cn("max-w-[80%] rounded-2xl p-3 shadow-sm", 
+                msg.userId === user.uid ? "bg-delijn-black text-white rounded-tr-none" : "bg-stone-100 text-delijn-black rounded-tl-none")}>
+                <div className="flex items-center gap-2 mb-1">
+                  {msg.avatarUrl && <img src={msg.avatarUrl} alt="" className="w-4 h-4 rounded-full" />}
+                  <span className="text-[10px] font-black uppercase tracking-wider opacity-70">{msg.userName}</span>
+                </div>
+                <p className="text-sm">{msg.text}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <form onSubmit={handleSendMessage} className="p-4 border-t border-stone-100 bg-stone-50 flex gap-2">
+        <input 
+          type="text"
+          value={newMessage}
+          onChange={e => setNewMessage(e.target.value)}
+          placeholder="Typ een bericht..."
+          className="flex-1 bg-white border border-stone-200 px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+        />
+        <button 
+          type="submit"
+          disabled={!newMessage.trim() || sending}
+          className="bg-delijn-black text-white p-2 rounded-xl hover:bg-stone-800 disabled:opacity-50 transition-all"
+        >
+          <Send size={20} />
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function BonusQuestionsView({ questions, answers, userId }: { questions: BonusQuestion[]; answers: BonusAnswer[]; userId: string }) {
+  const handleAnswer = async (questionId: string, answer: string) => {
+    const existing = answers.find(a => a.questionId === questionId);
+    if (existing) {
+      await updateDoc(doc(db, 'bonusAnswers', existing.id), { answer });
+    } else {
+      await addDoc(collection(db, 'bonusAnswers'), {
+        userId,
+        questionId,
+        answer,
+        pointsEarned: 0
+      });
+    }
+  };
+
+  const openQuestions = questions.filter(q => q.status === 'open');
+  const finishedQuestions = questions.filter(q => q.status !== 'open');
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <section>
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <HelpCircle className="text-delijn-black" size={28} />
+          Bonusvragen
+        </h2>
+        
+        {openQuestions.length === 0 ? (
+          <EmptyState message="Geen open bonusvragen op dit moment." />
+        ) : (
+          <div className="grid gap-6">
+            {openQuestions.map(q => {
+              const userAnswer = answers.find(a => a.questionId === q.id)?.answer;
+              const isExpired = new Date(q.deadline) < new Date();
+
+              return (
+                <div key={q.id} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-delijn-black">{q.question}</h3>
+                      <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mt-1">
+                        Deadline: {format(new Date(q.deadline), 'd MMM HH:mm')}
+                      </p>
+                    </div>
+                    <div className="bg-delijn-yellow text-delijn-black px-3 py-1 rounded-full text-xs font-black">
+                      +{q.points} PNT
+                    </div>
+                  </div>
+
+                  {q.options ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {q.options.map(opt => (
+                        <button
+                          key={opt}
+                          disabled={isExpired}
+                          onClick={() => handleAnswer(q.id, opt)}
+                          className={cn(
+                            "px-4 py-3 rounded-xl border text-sm font-bold transition-all text-left",
+                            userAnswer === opt 
+                              ? "bg-delijn-black text-white border-delijn-black" 
+                              : "bg-stone-50 border-stone-200 text-stone-600 hover:border-delijn-yellow"
+                          )}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <input 
+                      type="text"
+                      disabled={isExpired}
+                      placeholder="Typ je antwoord..."
+                      value={userAnswer || ''}
+                      onChange={e => handleAnswer(q.id, e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+                    />
+                  )}
+                  {isExpired && <p className="text-[10px] text-red-500 font-black uppercase tracking-widest mt-3">Deadline verstreken</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {finishedQuestions.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold mb-4 text-stone-400">Afgesloten Bonusvragen</h2>
+          <div className="grid gap-4 opacity-70">
+            {finishedQuestions.map(q => {
+              const userAnswer = answers.find(a => a.questionId === q.id);
+              const isCorrect = userAnswer?.answer === q.correctAnswer;
+
+              return (
+                <div key={q.id} className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-bold">{q.question}</p>
+                    <p className="text-xs text-stone-400">Correct antwoord: <span className="text-delijn-black">{q.correctAnswer || 'Nog niet bekend'}</span></p>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn("text-xs font-black uppercase tracking-widest", isCorrect ? "text-green-600" : "text-red-500")}>
+                      {userAnswer ? (isCorrect ? `+${q.points} PNT` : '0 PNT') : 'Niet ingevuld'}
+                    </p>
+                    <p className="text-[10px] text-stone-400 italic">Jouw antwoord: {userAnswer?.answer || '-'}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SettingsView({ profile, user }: { profile: UserProfile | null; user: UserPrivate }) {
+  const [displayName, setDisplayName] = useState(profile?.displayName || '');
+  const [favoriteTeam, setFavoriteTeam] = useState(profile?.favoriteTeam || '');
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || '');
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const teams = [
+    "België", "Nederland", "Frankrijk", "Duitsland", "Spanje", "Portugal", "Engeland", "Italië", "Brazilië", "Argentinië"
+  ];
+
+  const avatars = [
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Max",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Sophie",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Jack",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Luna",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oscar"
+  ];
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'profiles', user.uid), {
+        displayName,
+        favoriteTeam,
+        avatarUrl
+      });
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <section className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+        <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
+          <Settings className="text-delijn-black" size={28} />
+          Profiel Instellingen
+        </h2>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Display Naam</label>
+            <input 
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Favoriete Ploeg</label>
+            <select 
+              value={favoriteTeam}
+              onChange={e => setFavoriteTeam(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+            >
+              <option value="">Kies een ploeg...</option>
+              {teams.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Kies je Avatar</label>
+            <div className="grid grid-cols-4 gap-4">
+              {avatars.map(url => (
+                <button
+                  key={url}
+                  onClick={() => setAvatarUrl(url)}
+                  className={cn(
+                    "relative rounded-2xl overflow-hidden border-2 transition-all p-1",
+                    avatarUrl === url ? "border-delijn-yellow bg-delijn-yellow/10" : "border-transparent hover:border-stone-200"
+                  )}
+                >
+                  <img src={url} alt="Avatar" className="w-full aspect-square rounded-xl" />
+                  {avatarUrl === url && (
+                    <div className="absolute top-1 right-1 bg-delijn-yellow text-delijn-black rounded-full p-0.5">
+                      <CheckCircle2 size={12} />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-delijn-black text-white py-4 rounded-2xl font-bold hover:bg-stone-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          >
+            {saving ? 'Bezig met opslaan...' : success ? 'Opgeslagen!' : 'Instellingen Opslaan'}
+            {success && <CheckCircle2 size={20} />}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) {
+  const [newQ, setNewQ] = useState('');
+  const [newP, setNewP] = useState('5');
+  const [newD, setNewD] = useState('');
+  const [newO, setNewO] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
+    if (!newQ || !newD) return;
+    setAdding(true);
+    try {
+      await addDoc(collection(db, 'bonusQuestions'), {
+        question: newQ,
+        points: parseInt(newP),
+        deadline: new Date(newD).toISOString(),
+        options: newO ? newO.split(',').map(s => s.trim()) : null,
+        status: 'open'
+      });
+      setNewQ('');
+      setNewO('');
+    } catch (error) {
+      console.error("Error adding bonus question:", error);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: BonusQuestion['status'], correctAnswer?: string) => {
+    const update: any = { status };
+    if (correctAnswer) update.correctAnswer = correctAnswer;
+    await updateDoc(doc(db, 'bonusQuestions', id), update);
+
+    if (status === 'finished' && correctAnswer) {
+      // Award points
+      const answersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('questionId', '==', id)));
+      const batch = writeBatch(db);
+      const question = questions.find(q => q.id === id);
+      
+      const userPointsDelta: Record<string, number> = {};
+
+      answersSnapshot.docs.forEach(ansDoc => {
+        const ans = ansDoc.data() as BonusAnswer;
+        if (ans.answer === correctAnswer) {
+          batch.update(doc(db, 'bonusAnswers', ansDoc.id), { pointsEarned: question?.points });
+          userPointsDelta[ans.userId] = (userPointsDelta[ans.userId] || 0) + (question?.points || 0);
+        }
+      });
+
+      for (const [userId, delta] of Object.entries(userPointsDelta)) {
+        batch.update(doc(db, 'profiles', userId), { totalPoints: increment(delta) });
+      }
+
+      await batch.commit();
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <section className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+        <h3 className="text-lg font-bold mb-4">Nieuwe Bonusvraag</h3>
+        <div className="grid gap-4">
+          <input 
+            type="text"
+            placeholder="De vraag..."
+            value={newQ}
+            onChange={e => setNewQ(e.target.value)}
+            className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <input 
+              type="number"
+              placeholder="Punten"
+              value={newP}
+              onChange={e => setNewP(e.target.value)}
+              className="bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+            />
+            <input 
+              type="datetime-local"
+              value={newD}
+              onChange={e => setNewD(e.target.value)}
+              className="bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+            />
+          </div>
+          <input 
+            type="text"
+            placeholder="Opties (komma gescheiden, optioneel)"
+            value={newO}
+            onChange={e => setNewO(e.target.value)}
+            className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+          />
+          <button 
+            onClick={handleAdd}
+            disabled={adding || !newQ || !newD}
+            className="bg-delijn-black text-white py-3 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
+          >
+            Vraag Toevoegen
+          </button>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        {questions.map(q => (
+          <div key={q.id} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="font-bold">{q.question}</p>
+                <p className="text-xs text-stone-400">Status: {q.status} | Deadline: {format(new Date(q.deadline), 'd MMM HH:mm')}</p>
+              </div>
+              <button onClick={() => deleteDoc(doc(db, 'bonusQuestions', q.id))} className="text-stone-300 hover:text-red-600"><Trash2 size={18} /></button>
+            </div>
+
+            <div className="flex gap-2">
+              {q.status === 'open' && (
+                <button onClick={() => handleUpdateStatus(q.id, 'closed')} className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-xs font-bold">Sluiten</button>
+              )}
+              {q.status === 'closed' && (
+                <div className="flex gap-2 w-full">
+                  <input 
+                    type="text" 
+                    placeholder="Correct antwoord..." 
+                    id={`correct-${q.id}`}
+                    className="flex-1 bg-stone-50 border border-stone-200 px-3 py-1 rounded-lg text-xs"
+                  />
+                  <button 
+                    onClick={() => {
+                      const val = (document.getElementById(`correct-${q.id}`) as HTMLInputElement).value;
+                      if (val) handleUpdateStatus(q.id, 'finished', val);
+                    }}
+                    className="bg-delijn-yellow text-delijn-black px-3 py-1 rounded-lg text-xs font-bold"
+                  >
+                    Bevestig & Punten
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

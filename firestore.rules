@@ -19,6 +19,9 @@ service cloud.firestore {
     //   - displayName: string (required)
     //   - photoURL: string (optional)
     //   - totalPoints: number (required)
+    //   - favoriteTeam: string (optional)
+    //   - avatarUrl: string (optional)
+    //   - previousRank: number (optional)
     //
     // Collection: matches
     // Document ID: matchId
@@ -41,6 +44,36 @@ service cloud.firestore {
     //   - awayScore: number (required)
     //   - pointsEarned: number (optional)
     //
+    // Collection: bonusQuestions
+    // Document ID: questionId
+    // Fields:
+    //   - id: string (required)
+    //   - question: string (required)
+    //   - points: number (required)
+    //   - options: array (optional)
+    //   - correctAnswer: string (optional)
+    //   - deadline: string (required, ISO 8601)
+    //   - status: string (required, 'open', 'closed', 'finished')
+    //
+    // Collection: bonusAnswers
+    // Document ID: answerId
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - questionId: string (required)
+    //   - answer: string (required)
+    //   - pointsEarned: number (optional)
+    //
+    // Collection: messages
+    // Document ID: messageId
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - userName: string (required)
+    //   - text: string (required)
+    //   - timestamp: timestamp (required)
+    //   - avatarUrl: string (optional)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -56,8 +89,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "29076@delijn.be" ||
-         request.auth.uid == "H9GIQyN5JcZNtEqKbyfERDE5kKq2" ||
+        (request.auth.token.email == "christoffrotty84@gmail.com" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
@@ -86,11 +118,14 @@ service cloud.firestore {
     }
 
     function isValidProfile(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints']) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank']) &&
         data.uid is string && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
         (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
-        data.totalPoints is number;
+        data.totalPoints is number &&
+        (!('favoriteTeam' in data) || data.favoriteTeam is string) &&
+        (!('avatarUrl' in data) || data.avatarUrl is string) &&
+        (!('previousRank' in data) || data.previousRank is number);
     }
 
     function isValidMatch(data) {
@@ -110,6 +145,31 @@ service cloud.firestore {
         data.awayScore is number && data.awayScore >= 0 &&
         (!('id' in data) || data.id is string) &&
         (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number);
+    }
+
+    function isValidBonusQuestion(data) {
+      return hasOnlyAllowedFields(['id', 'question', 'points', 'options', 'correctAnswer', 'deadline', 'status']) &&
+        data.question is string && data.question.size() > 0 &&
+        data.points is number && data.points >= 0 &&
+        data.deadline is string &&
+        data.status in ['open', 'closed', 'finished'];
+    }
+
+    function isValidBonusAnswer(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'questionId', 'answer', 'pointsEarned']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.questionId is string &&
+        data.answer is string && data.answer.size() > 0 &&
+        (!('pointsEarned' in data) || data.pointsEarned is number);
+    }
+
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'userName', 'text', 'timestamp', 'avatarUrl']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.userName is string && data.userName.size() > 0 &&
+        data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+        data.timestamp is timestamp &&
+        (data.avatarUrl == null || data.avatarUrl is string);
     }
 
     // ===============================================================
@@ -139,13 +199,34 @@ service cloud.firestore {
 
     match /predictions/{predictionId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && request.resource.data.id == predictionId;
+      allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && (predictionId == request.resource.data.id || predictionId == request.resource.id);
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
                        (resource.data.userId == request.auth.uid && 
                         isValidPrediction(request.resource.data) && 
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pointsEarned', 'userId', 'matchId', 'id'])));
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /bonusQuestions/{questionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidBonusQuestion(request.resource.data);
+      allow update: if isAdmin() && isValidBonusQuestion(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /bonusAnswers/{answerId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidBonusAnswer(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (resource.data.userId == request.auth.uid && isValidBonusAnswer(request.resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pointsEarned', 'userId', 'questionId', 'id'])));
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Default deny

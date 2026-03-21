@@ -19,7 +19,10 @@
         "uid": { "type": "string", "description": "Unique identifier for the user" },
         "displayName": { "type": "string", "description": "User's display name" },
         "photoURL": { "type": "string", "description": "URL to user's profile picture" },
-        "totalPoints": { "type": "number", "description": "Total points earned by the user" }
+        "totalPoints": { "type": "number", "description": "Total points earned by the user" },
+        "favoriteTeam": { "type": "string", "description": "User's favorite team" },
+        "avatarUrl": { "type": "string", "description": "User's chosen avatar URL" },
+        "previousRank": { "type": "number", "description": "User's rank before the last update" }
       },
       "required": ["uid", "displayName", "totalPoints"]
     },
@@ -51,12 +54,57 @@
         "pointsEarned": { "type": "number", "description": "Points earned for this prediction (calculated after match)" }
       },
       "required": ["id", "userId", "matchId", "homeScore", "awayScore"]
+    },
+    "BonusQuestion": {
+      "title": "BonusQuestion",
+      "description": "A bonus question for extra points",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "question": { "type": "string", "description": "The question text" },
+        "points": { "type": "number", "description": "Points awarded for correct answer" },
+        "options": { "type": "array", "items": { "type": "string" }, "description": "Possible answers" },
+        "correctAnswer": { "type": "string", "description": "The correct answer" },
+        "deadline": { "type": "string", "format": "date-time", "description": "Deadline for answering" },
+        "status": { "type": "string", "enum": ["open", "closed", "finished"], "description": "Current status" }
+      },
+      "required": ["id", "question", "points", "deadline", "status"]
+    },
+    "BonusAnswer": {
+      "title": "BonusAnswer",
+      "description": "A user's answer to a bonus question",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "userId": { "type": "string", "description": "ID of the user" },
+        "questionId": { "type": "string", "description": "ID of the bonus question" },
+        "answer": { "type": "string", "description": "User's answer" },
+        "pointsEarned": { "type": "number", "description": "Points earned" }
+      },
+      "required": ["id", "userId", "questionId", "answer"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in the chatbox",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "userId": { "type": "string", "description": "ID of the user" },
+        "userName": { "type": "string", "description": "Name of the user" },
+        "text": { "type": "string", "description": "Message text" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the message was sent" },
+        "avatarUrl": { "type": "string", "description": "User's avatar URL" }
+      },
+      "required": ["id", "userId", "userName", "text", "timestamp"]
     }
   },
   "firestore": {
     "/users/{userId}": { "schema": "User", "description": "Collection of private user information" },
     "/profiles/{userId}": { "schema": "Profile", "description": "Collection of public user profiles for the leaderboard" },
     "/matches/{matchId}": { "schema": "Match", "description": "Collection of tournament matches" },
-    "/predictions/{predictionId}": { "schema": "Prediction", "description": "Collection of user predictions" }
+    "/predictions/{predictionId}": { "schema": "Prediction", "description": "Collection of user predictions" },
+    "/bonusQuestions/{questionId}": { "schema": "BonusQuestion", "description": "Collection of bonus questions" },
+    "/bonusAnswers/{answerId}": { "schema": "BonusAnswer", "description": "Collection of user bonus answers" },
+    "/messages/{messageId}": { "schema": "Message", "description": "Collection of chat messages" }
   }
 }
