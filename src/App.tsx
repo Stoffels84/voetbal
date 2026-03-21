@@ -61,6 +61,17 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
 import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Message, Poll, PollVote, AppNotification } from './types';
 import { 
   addDoc,
@@ -71,6 +82,23 @@ import {
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const TEAM_COLORS: Record<string, { primary: string, secondary: string, text: string }> = {
+  'België': { primary: '#E30613', secondary: '#FFD200', text: '#000000' },
+  'Duitsland': { primary: '#000000', secondary: '#FFD200', text: '#FFFFFF' },
+  'Frankrijk': { primary: '#002395', secondary: '#ED2939', text: '#FFFFFF' },
+  'Spanje': { primary: '#AA151B', secondary: '#F1BF00', text: '#FFFFFF' },
+  'Engeland': { primary: '#FFFFFF', secondary: '#CE1124', text: '#000000' },
+  'Italië': { primary: '#008C45', secondary: '#F4F5F0', text: '#FFFFFF' },
+  'Nederland': { primary: '#F36C21', secondary: '#FFFFFF', text: '#FFFFFF' },
+  'Portugal': { primary: '#006600', secondary: '#FF0000', text: '#FFFFFF' },
+  'Brazilië': { primary: '#FEDF00', secondary: '#009739', text: '#000000' },
+  'Argentinië': { primary: '#75AADB', secondary: '#FFFFFF', text: '#000000' },
+  'Marokko': { primary: '#C1272D', secondary: '#006233', text: '#FFFFFF' },
+  'Kroatië': { primary: '#FF0000', secondary: '#FFFFFF', text: '#FFFFFF' },
+};
+
+const DEFAULT_THEME = { primary: '#FFD200', secondary: '#1A1A1A', text: '#1A1A1A' };
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<any, any> {
@@ -112,11 +140,156 @@ class ErrorBoundary extends React.Component<any, any> {
   }
 }
 
+function PredictionStats({ matchId, predictions }: { matchId: string, predictions: Prediction[] }) {
+  const matchPredictions = predictions.filter(p => p.matchId === matchId);
+  if (matchPredictions.length === 0) return null;
+
+  let homeWins = 0;
+  let draws = 0;
+  let awayWins = 0;
+
+  matchPredictions.forEach(p => {
+    if (p.homeScore > p.awayScore) homeWins++;
+    else if (p.homeScore < p.awayScore) awayWins++;
+    else draws++;
+  });
+
+  const total = matchPredictions.length;
+  const homePct = Math.round((homeWins / total) * 100);
+  const drawPct = Math.round((draws / total) * 100);
+  const awayPct = Math.round((awayWins / total) * 100);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-stone-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Voorspellingen</span>
+        <span className="text-xs font-medium text-stone-500">{total} {total === 1 ? 'stem' : 'stemmen'}</span>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden bg-stone-100">
+        <div style={{ width: `${homePct}%` }} className="bg-emerald-500 h-full" title={`Thuiswinst: ${homePct}%`} />
+        <div style={{ width: `${drawPct}%` }} className="bg-stone-400 h-full" title={`Gelijkspel: ${drawPct}%`} />
+        <div style={{ width: `${awayPct}%` }} className="bg-red-500 h-full" title={`Uitwinst: ${awayPct}%`} />
+      </div>
+      <div className="flex justify-between mt-1 text-[10px] font-bold text-stone-500">
+        <span>1: {homePct}%</span>
+        <span>X: {drawPct}%</span>
+        <span>2: {awayPct}%</span>
+      </div>
+    </div>
+  );
+}
+
+function HeadToHeadView({ 
+  currentUser, 
+  targetUser, 
+  matches, 
+  predictions, 
+  onBack 
+}: { 
+  currentUser: UserProfile, 
+  targetUser: UserProfile, 
+  matches: Match[], 
+  predictions: Prediction[],
+  onBack: () => void
+}) {
+  const currentPredictions = predictions.filter(p => p.userId === currentUser.uid);
+  const targetPredictions = predictions.filter(p => p.userId === targetUser.uid);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
+          <ArrowRight className="rotate-180" size={24} />
+        </button>
+        <h2 className="text-2xl font-bold text-delijn-black">Head-to-Head</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-6 rounded-3xl shadow-xl border border-stone-100 text-center">
+          <img src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.displayName}`} className="w-16 h-16 mx-auto mb-3 rounded-full border-2 border-delijn-yellow" />
+          <p className="font-bold text-delijn-black">{currentUser.displayName}</p>
+          <p className="text-2xl font-black text-delijn-yellow">{currentUser.totalPoints} pts</p>
+        </div>
+        <div className="bg-white p-6 rounded-3xl shadow-xl border border-stone-100 text-center">
+          <img src={targetUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${targetUser.displayName}`} className="w-16 h-16 mx-auto mb-3 rounded-full border-2 border-stone-200" />
+          <p className="font-bold text-delijn-black">{targetUser.displayName}</p>
+          <p className="text-2xl font-black text-stone-400">{targetUser.totalPoints} pts</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-stone-400 px-2">Vergelijking</h3>
+        {matches.filter(m => m.status === 'finished').map(match => {
+          const myPred = currentPredictions.find(p => p.matchId === match.id);
+          const theirPred = targetPredictions.find(p => p.matchId === match.id);
+
+          return (
+            <div key={match.id} className="bg-white p-4 rounded-2xl shadow-md border border-stone-100">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-bold text-stone-400 uppercase">{format(new Date(match.date), 'dd MMM HH:mm', { locale: nl })}</span>
+                <span className="text-xs font-black bg-stone-100 px-2 py-1 rounded-lg">{match.homeScore} - {match.awayScore}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 text-right">
+                  <p className="text-sm font-bold text-delijn-black truncate">{match.homeTeam}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={cn("px-2 py-1 rounded-lg text-xs font-bold", myPred?.pointsEarned ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500")}>
+                    {myPred ? `${myPred.homeScore}-${myPred.awayScore}` : '-'}
+                  </div>
+                  <span className="text-xs font-bold text-stone-300">vs</span>
+                  <div className={cn("px-2 py-1 rounded-lg text-xs font-bold", theirPred?.pointsEarned ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500")}>
+                    {theirPred ? `${theirPred.homeScore}-${theirPred.awayScore}` : '-'}
+                  </div>
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-bold text-delijn-black truncate">{match.awayTeam}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {matches.filter(m => m.status === 'finished').length === 0 && (
+          <p className="text-center text-stone-400 py-8 italic">Nog geen gespeelde wedstrijden om te vergelijken.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RankChart({ history }: { history: { timestamp: any, rank: number }[] }) {
+  if (!history || history.length < 2) return null;
+
+  const data = history.map(h => ({
+    name: format(new Date(h.timestamp?.seconds * 1000 || h.timestamp), 'dd/MM'),
+    rank: h.rank
+  }));
+
+  return (
+    <div className="h-48 w-full mt-4">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <XAxis dataKey="name" hide />
+          <YAxis reversed hide />
+          <Tooltip 
+            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+            labelStyle={{ fontWeight: 'bold' }}
+          />
+          <Area type="monotone" dataKey="rank" stroke="#FFD200" fill="#FFD200" fillOpacity={0.1} strokeWidth={3} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function AppContent() {
   const [user, setUser] = useState<UserPrivate | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls' | 'h2h'>('predictions');
+  const [h2hTargetId, setH2hTargetId] = useState<string | null>(null);
+  const [previewTeam, setPreviewTeam] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   
   const [matches, setMatches] = useState<Match[]>([]);
@@ -128,6 +301,10 @@ function AppContent() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [pollVotes, setPollVotes] = useState<PollVote[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  const theme = (previewTeam && activeTab === 'settings') 
+    ? (TEAM_COLORS[previewTeam] || DEFAULT_THEME)
+    : (profile?.favoriteTeam ? (TEAM_COLORS[profile.favoriteTeam] || DEFAULT_THEME) : DEFAULT_THEME);
 
   // Auth form state
   const [isRegistering, setIsRegistering] = useState(false);
@@ -246,6 +423,16 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'profiles')
     );
 
+    const profileUnsubscribe = onSnapshot(
+      doc(db, 'profiles', user.uid),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setProfile(snapshot.data() as UserProfile);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, 'profiles/' + user.uid)
+    );
+
     const bonusQuestionsUnsubscribe = onSnapshot(
       query(collection(db, 'bonusQuestions'), orderBy('deadline', 'asc')),
       (snapshot) => {
@@ -298,6 +485,7 @@ function AppContent() {
       matchesUnsubscribe();
       predictionsUnsubscribe();
       leaderboardUnsubscribe();
+      profileUnsubscribe();
       bonusQuestionsUnsubscribe();
       bonusAnswersUnsubscribe();
       messagesUnsubscribe();
@@ -307,16 +495,19 @@ function AppContent() {
     };
   }, [user]);
 
-  const handleAuth = async (e: React.FormEvent) => {
+    const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     setAuthSuccess('');
     setAuthLoading(true);
 
+    console.log("Auth attempt:", { isResetting, isRegistering, email });
+
     try {
       if (isResetting) {
         await sendPasswordResetEmail(auth, email);
-        setAuthSuccess('Er is een e-mail gestuurd om je wachtwoord te herstellen.');
+        setAuthSuccess('Er is een e-mail gestuurd naar ' + email + ' om je wachtwoord te herstellen. Controleer ook je spam-folder.');
+        setAuthError('');
       } else if (isRegistering) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName });
@@ -329,12 +520,16 @@ function AppContent() {
       
       if (error.code === 'auth/invalid-credential') {
         message = "Onjuiste e-mail of wachtwoord.";
+      } else if (error.code === 'auth/user-not-found') {
+        message = "Er is geen account gevonden met dit e-mailadres.";
       } else if (error.code === 'auth/too-many-requests') {
         message = "Te veel mislukte pogingen. Probeer het later opnieuw.";
       } else if (error.code === 'auth/email-already-in-use') {
         message = "Dit e-mailadres is al in gebruik.";
       } else if (error.code === 'auth/weak-password') {
         message = "Het wachtwoord is te zwak.";
+      } else if (error.code === 'auth/operation-not-allowed') {
+        message = "Deze operatie is niet toegestaan. Neem contact op met de beheerder.";
       } else if (error.code === 'auth/invalid-email') {
         message = "Ongeldig e-mailadres.";
       } else if (error.message) {
@@ -482,13 +677,21 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 text-delijn-black font-sans">
+    <div 
+      className="min-h-screen bg-stone-50 text-delijn-black font-sans"
+      style={{
+        // @ts-ignore
+        '--theme-primary': theme.primary,
+        '--theme-secondary': theme.secondary,
+        '--theme-text': theme.text
+      }}
+    >
       {/* Header */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-delijn-yellow p-2 rounded-xl">
-              <Trophy className="text-delijn-black" size={24} />
+            <div className="bg-theme-primary p-2 rounded-xl">
+              <Trophy className="text-theme-text" size={24} />
             </div>
             <h1 className="text-xl font-bold tracking-tight hidden sm:block">WK Pronostiek</h1>
           </div>
@@ -660,7 +863,23 @@ function AppContent() {
           <PredictionsView matches={matches} predictions={predictions} userId={user.uid} />
         )}
         {activeTab === 'leaderboard' && (
-          <LeaderboardView leaderboard={leaderboard} currentUserId={user.uid} />
+          <LeaderboardView 
+            leaderboard={leaderboard} 
+            currentUserId={user.uid} 
+            onCompare={(targetId) => {
+              setH2hTargetId(targetId);
+              setActiveTab('h2h');
+            }}
+          />
+        )}
+        {activeTab === 'h2h' && h2hTargetId && (
+          <HeadToHeadView 
+            currentUser={profile!} 
+            targetUser={leaderboard.find(p => p.uid === h2hTargetId)!}
+            matches={matches}
+            predictions={predictions}
+            onBack={() => setActiveTab('leaderboard')}
+          />
         )}
         {activeTab === 'bonus' && (
           <BonusQuestionsView questions={bonusQuestions} answers={bonusAnswers} userId={user.uid} />
@@ -675,7 +894,11 @@ function AppContent() {
           <RulesView />
         )}
         {activeTab === 'settings' && (
-          <SettingsView profile={profile} user={user} />
+          <SettingsView 
+            profile={profile} 
+            user={user} 
+            onThemePreview={setPreviewTeam}
+          />
         )}
         {activeTab === 'admin' && user.role === 'admin' && (
           <AdminView matches={matches} bonusQuestions={bonusQuestions} polls={polls} />
@@ -699,7 +922,7 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
       onClick={onClick}
       className={cn(
         "flex-1 py-4 flex items-center justify-center gap-2 text-sm font-bold transition-all border-b-2",
-        active ? "border-delijn-yellow text-delijn-black bg-delijn-yellow/10" : "border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50"
+        active ? "border-theme-primary text-delijn-black bg-theme-primary/10" : "border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50"
       )}
     >
       {icon}
@@ -843,7 +1066,7 @@ const MatchCard: React.FC<{
               value={homeScore}
               onChange={(e) => setHomeScore(e.target.value)}
               disabled={readonly || saving}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-theme-primary outline-none disabled:opacity-50"
               placeholder="?"
             />
             <span className="text-stone-400 font-bold">-</span>
@@ -853,7 +1076,7 @@ const MatchCard: React.FC<{
               value={awayScore}
               onChange={(e) => setAwayScore(e.target.value)}
               disabled={readonly || saving}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-theme-primary outline-none disabled:opacity-50"
               placeholder="?"
             />
           </div>
@@ -865,7 +1088,7 @@ const MatchCard: React.FC<{
               className={cn(
                 "px-4 py-3 rounded-xl font-bold transition-all flex items-center gap-2",
                 isSaved 
-                  ? "bg-delijn-yellow text-delijn-black cursor-default" 
+                  ? "bg-theme-primary text-theme-text cursor-default" 
                   : "bg-delijn-black text-white hover:bg-stone-800 active:scale-95 disabled:opacity-50"
               )}
             >
@@ -1065,9 +1288,17 @@ function RulesView() {
   );
 }
 
-function LeaderboardView({ leaderboard, currentUserId }: { leaderboard: UserProfile[]; currentUserId: string }) {
+function LeaderboardView({ 
+  leaderboard, 
+  currentUserId, 
+  onCompare 
+}: { 
+  leaderboard: UserProfile[]; 
+  currentUserId: string;
+  onCompare: (userId: string) => void;
+}) {
   return (
-    <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
         <h2 className="text-xl font-bold">Top Voorspellers</h2>
         <div className="flex items-center gap-2 text-xs text-stone-400 font-bold uppercase tracking-widest">
@@ -1093,8 +1324,8 @@ function LeaderboardView({ leaderboard, currentUserId }: { leaderboard: UserProf
               <div 
                 key={entry.uid} 
                 className={cn(
-                  "flex items-center gap-4 p-4 transition-colors",
-                  entry.uid === currentUserId ? "bg-delijn-yellow/10" : "hover:bg-stone-50"
+                  "group flex items-center gap-4 p-4 transition-colors",
+                  entry.uid === currentUserId ? "bg-theme-primary/10" : "hover:bg-stone-50"
                 )}
               >
                 <div className="w-8 flex flex-col items-center">
@@ -1119,11 +1350,22 @@ function LeaderboardView({ leaderboard, currentUserId }: { leaderboard: UserProf
                       </span>
                     )}
                   </div>
-                  {entry.uid === currentUserId && <span className="text-[10px] bg-delijn-black text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Jij</span>}
+                  {entry.uid === currentUserId && <span className="text-[10px] bg-theme-secondary text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Jij</span>}
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-black text-delijn-black">{entry.totalPoints}</p>
-                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Punten</p>
+                <div className="flex items-center gap-3">
+                  {entry.uid !== currentUserId && (
+                    <button 
+                      onClick={() => onCompare(entry.uid)}
+                      className="p-2 rounded-xl bg-stone-100 text-stone-400 hover:bg-theme-primary hover:text-theme-text transition-all sm:opacity-0 sm:group-hover:opacity-100 opacity-100"
+                      title="Vergelijk met mij"
+                    >
+                      <Smartphone size={16} />
+                    </button>
+                  )}
+                  <div className="text-right min-w-[60px]">
+                    <p className="text-lg font-black text-delijn-black">{entry.totalPoints}</p>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Punten</p>
+                  </div>
                 </div>
               </div>
             );
@@ -1583,10 +1825,10 @@ function CountdownTimer({ matches }: { matches: Match[] }) {
   if (!timeLeft || !nextMatch) return null;
 
   return (
-    <div className="bg-delijn-black text-white p-4 rounded-3xl mb-8 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-500">
+    <div className="bg-theme-secondary text-white p-4 rounded-3xl mb-8 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-500">
       <div className="flex items-center gap-3">
-        <div className="bg-delijn-yellow/20 p-2 rounded-xl">
-          <Timer className="text-delijn-yellow" size={20} />
+        <div className="bg-theme-primary/20 p-2 rounded-xl">
+          <Timer className="text-theme-primary" size={20} />
         </div>
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Volgende wedstrijd</p>
@@ -1595,7 +1837,7 @@ function CountdownTimer({ matches }: { matches: Match[] }) {
       </div>
       <div className="text-right">
         <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Aftellen</p>
-        <p className="font-mono font-bold text-delijn-yellow">{timeLeft}</p>
+        <p className="font-mono font-bold text-theme-primary">{timeLeft}</p>
       </div>
     </div>
   );
@@ -1797,12 +2039,26 @@ function BonusQuestionsView({ questions, answers, userId }: { questions: BonusQu
   );
 }
 
-function SettingsView({ profile, user }: { profile: UserProfile | null; user: UserPrivate }) {
+function SettingsView({ 
+  profile, 
+  user, 
+  onThemePreview 
+}: { 
+  profile: UserProfile | null; 
+  user: UserPrivate;
+  onThemePreview: (team: string | null) => void;
+}) {
   const [displayName, setDisplayName] = useState(profile?.displayName || '');
   const [favoriteTeam, setFavoriteTeam] = useState(profile?.favoriteTeam || '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || '');
+  const [topScorer, setTopScorer] = useState(profile?.topScorer || '');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    onThemePreview(favoriteTeam);
+    return () => onThemePreview(null);
+  }, [favoriteTeam, onThemePreview]);
 
   const teams = [
     "België", "Nederland", "Frankrijk", "Duitsland", "Spanje", "Portugal", "Engeland", "Italië", "Brazilië", "Argentinië"
@@ -1824,7 +2080,23 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Mia",
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Leo",
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Ruby",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Toby"
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Toby",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Bear",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Coco",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Daisy",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Duke",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Ginger",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Honey",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Lola",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Lucky",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Misty",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Peanut",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Pepper",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Princess",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Rocky",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Sasha",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Shadow",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Simba"
   ];
 
   const handleSave = async () => {
@@ -1833,7 +2105,8 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
       await updateDoc(doc(db, 'profiles', user.uid), {
         displayName,
         favoriteTeam,
-        avatarUrl
+        avatarUrl,
+        topScorer
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -1876,6 +2149,18 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
           </div>
 
           <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Gouden Schoen (Topscorer)</label>
+            <input 
+              type="text"
+              placeholder="Wie wordt de topscorer?"
+              value={topScorer}
+              onChange={e => setTopScorer(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow font-bold"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 italic">Voorspel de topscorer van het toernooi voor bonuspunten!</p>
+          </div>
+
+          <div>
             <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Kies je Avatar</label>
             <div className="grid grid-cols-4 gap-4">
               {avatars.map(url => (
@@ -1889,7 +2174,7 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
                 >
                   <img src={url} alt="Avatar" className="w-full aspect-square rounded-xl" />
                   {avatarUrl === url && (
-                    <div className="absolute top-1 right-1 bg-delijn-yellow text-delijn-black rounded-full p-0.5">
+                    <div className="absolute top-1 right-1 bg-theme-primary text-theme-text rounded-full p-0.5">
                       <CheckCircle2 size={12} />
                     </div>
                   )}
@@ -1908,6 +2193,16 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
           </button>
         </div>
       </section>
+
+      {profile?.rankHistory && profile.rankHistory.length >= 2 && (
+        <section className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <TrendingUp size={20} className="text-delijn-yellow" />
+            Jouw Klassement Verloop
+          </h3>
+          <RankChart history={profile.rankHistory} />
+        </section>
+      )}
     </div>
   );
 }
@@ -2185,7 +2480,7 @@ function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) 
                       const val = (document.getElementById(`correct-${q.id}`) as HTMLInputElement).value;
                       if (val) handleUpdateStatus(q.id, 'finished', val);
                     }}
-                    className="bg-delijn-yellow text-delijn-black px-3 py-1 rounded-lg text-xs font-bold"
+                    className="bg-theme-primary text-theme-text px-3 py-1 rounded-lg text-xs font-bold"
                   >
                     Bevestig & Punten
                   </button>

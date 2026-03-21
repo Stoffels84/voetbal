@@ -6,6 +6,8 @@ export interface UserProfile {
   favoriteTeam?: string;
   avatarUrl?: string;
   previousRank?: number;
+  rankHistory?: { timestamp: any; rank: number }[];
+  topScorer?: string;
 }
 
 export interface UserPrivate {

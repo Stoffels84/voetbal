@@ -3,4 +3,8 @@
 @theme {
   --color-delijn-yellow: #FFD200;
   --color-delijn-black: #1A1A1A;
+  
+  --color-theme-primary: var(--theme-primary, #FFD200);
+  --color-theme-secondary: var(--theme-secondary, #1A1A1A);
+  --color-theme-text: var(--theme-text, #1A1A1A);
 }

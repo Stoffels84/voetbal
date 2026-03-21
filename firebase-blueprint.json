@@ -22,7 +22,19 @@
         "totalPoints": { "type": "number", "description": "Total points earned by the user" },
         "favoriteTeam": { "type": "string", "description": "User's favorite team" },
         "avatarUrl": { "type": "string", "description": "User's chosen avatar URL" },
-        "previousRank": { "type": "number", "description": "User's rank before the last update" }
+        "previousRank": { "type": "number", "description": "User's rank before the last update" },
+        "rankHistory": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "timestamp": { "type": "string", "format": "date-time" },
+              "rank": { "type": "number" }
+            }
+          },
+          "description": "History of user's rank over time"
+        },
+        "topScorer": { "type": "string", "description": "User's prediction for the tournament top scorer" }
       },
       "required": ["uid", "displayName", "totalPoints"]
     },
