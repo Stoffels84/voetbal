@@ -1816,7 +1816,15 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Jack",
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Luna",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oscar"
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oscar",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Jasper",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Charlie",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Mia",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Leo",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Ruby",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Toby"
   ];
 
   const handleSave = async () => {
