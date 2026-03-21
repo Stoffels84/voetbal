@@ -59,3 +59,29 @@ export interface Message {
   timestamp: any;
   avatarUrl?: string;
 }
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: string[];
+  results: number[];
+  status: 'open' | 'closed';
+  createdAt: any;
+}
+
+export interface PollVote {
+  userId: string;
+  pollId: string;
+  optionIndex: number;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning';
+  read: boolean;
+  link?: string;
+  createdAt: any;
+}

@@ -96,6 +96,45 @@
         "avatarUrl": { "type": "string", "description": "User's avatar URL" }
       },
       "required": ["id", "userId", "userName", "text", "timestamp"]
+    },
+    "Poll": {
+      "title": "Poll",
+      "description": "A quick poll for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "question", "options", "status", "createdAt"]
+    },
+    "PollVote": {
+      "title": "PollVote",
+      "description": "A user's vote in a poll",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "pollId": { "type": "string" },
+        "optionIndex": { "type": "number" }
+      },
+      "required": ["userId", "pollId", "optionIndex"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notification for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
     }
   },
   "firestore": {
@@ -105,6 +144,9 @@
     "/predictions/{predictionId}": { "schema": "Prediction", "description": "Collection of user predictions" },
     "/bonusQuestions/{questionId}": { "schema": "BonusQuestion", "description": "Collection of bonus questions" },
     "/bonusAnswers/{answerId}": { "schema": "BonusAnswer", "description": "Collection of user bonus answers" },
-    "/messages/{messageId}": { "schema": "Message", "description": "Collection of chat messages" }
+    "/messages/{messageId}": { "schema": "Message", "description": "Collection of chat messages" },
+    "/polls/{pollId}": { "schema": "Poll", "description": "Collection of quick polls" },
+    "/pollVotes/{id}": { "schema": "PollVote", "description": "Collection of poll votes" },
+    "/notifications/{notificationId}": { "schema": "Notification", "description": "Collection of user notifications" }
   }
 }

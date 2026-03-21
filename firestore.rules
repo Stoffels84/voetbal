@@ -172,6 +172,26 @@ service cloud.firestore {
         (data.avatarUrl == null || data.avatarUrl is string);
     }
 
+    function isValidPoll(data) {
+      return hasOnlyAllowedFields(['id', 'question', 'options', 'status', 'createdAt']) &&
+        data.id is string && data.question is string && data.options is list &&
+        data.status in ['open', 'closed'] && data.createdAt is timestamp;
+    }
+
+    function isValidPollVote(data) {
+      return hasOnlyAllowedFields(['userId', 'pollId', 'optionIndex']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.pollId is string && data.optionIndex is number;
+    }
+
+    function isValidNotification(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.title is string && data.message is string &&
+        data.type in ['info', 'success', 'warning'] &&
+        data.read is bool && data.createdAt is timestamp;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -198,7 +218,7 @@ service cloud.firestore {
     }
 
     match /predictions/{predictionId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && (predictionId == request.resource.data.id || predictionId == request.resource.id);
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
@@ -227,6 +247,24 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidMessage(request.resource.data);
       allow update: if isAdmin();
       allow delete: if isAdmin();
+    }
+
+    match /polls/{pollId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /pollVotes/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPollVote(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isAdmin();
+      allow update: if isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isOwner(resource.data.userId);
     }
 
     // Default deny

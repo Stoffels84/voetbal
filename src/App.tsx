@@ -53,11 +53,15 @@ import {
   Minus,
   Send,
   Timer,
-  Camera
+  Camera,
+  Bell,
+  BarChart3,
+  Vote,
+  Smartphone
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Message } from './types';
+import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Message, Poll, PollVote, AppNotification } from './types';
 import { 
   addDoc,
   serverTimestamp,
@@ -112,7 +116,8 @@ function AppContent() {
   const [user, setUser] = useState<UserPrivate | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls'>('predictions');
+  const [showNotifications, setShowNotifications] = useState(false);
   
   const [matches, setMatches] = useState<Match[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -120,6 +125,9 @@ function AppContent() {
   const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([]);
   const [bonusAnswers, setBonusAnswers] = useState<BonusAnswer[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [pollVotes, setPollVotes] = useState<PollVote[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Auth form state
   const [isRegistering, setIsRegistering] = useState(false);
@@ -223,7 +231,7 @@ function AppContent() {
     );
 
     const predictionsUnsubscribe = onSnapshot(
-      query(collection(db, 'predictions'), where('userId', '==', user.uid)),
+      collection(db, 'predictions'),
       (snapshot) => {
         setPredictions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Prediction)));
       },
@@ -262,6 +270,30 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'messages')
     );
 
+    const pollsUnsubscribe = onSnapshot(
+      query(collection(db, 'polls'), orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        setPolls(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Poll)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'polls')
+    );
+
+    const pollVotesUnsubscribe = onSnapshot(
+      query(collection(db, 'pollVotes'), where('userId', '==', user.uid)),
+      (snapshot) => {
+        setPollVotes(snapshot.docs.map(doc => doc.data() as PollVote));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'pollVotes')
+    );
+
+    const notificationsUnsubscribe = onSnapshot(
+      query(collection(db, 'notifications'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(20)),
+      (snapshot) => {
+        setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'notifications')
+    );
+
     return () => {
       matchesUnsubscribe();
       predictionsUnsubscribe();
@@ -269,6 +301,9 @@ function AppContent() {
       bonusQuestionsUnsubscribe();
       bonusAnswersUnsubscribe();
       messagesUnsubscribe();
+      pollsUnsubscribe();
+      pollVotesUnsubscribe();
+      notificationsUnsubscribe();
     };
   }, [user]);
 
@@ -472,6 +507,86 @@ function AppContent() {
                 <UserIcon size={20} className="text-stone-500" />
               </div>
             )}
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={cn(
+                  "p-2 transition-colors relative", 
+                  showNotifications ? "text-delijn-black" : "text-stone-400 hover:text-delijn-black"
+                )}
+                title="Notificaties"
+              >
+                <Bell size={20} />
+                {notifications.some(n => !n.read) && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-3xl border border-stone-200 shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-4 border-b border-stone-100 bg-stone-50 flex items-center justify-between">
+                    <h3 className="font-bold text-sm">Notificaties</h3>
+                    {notifications.some(n => !n.read) && (
+                      <button 
+                        onClick={async () => {
+                          const unread = notifications.filter(n => !n.read);
+                          for (const n of unread) {
+                            await updateDoc(doc(db, 'notifications', n.id), { read: true });
+                          }
+                        }}
+                        className="text-[10px] font-black text-delijn-black uppercase hover:underline"
+                      >
+                        Alles gelezen
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <Bell size={32} className="mx-auto text-stone-200 mb-2" />
+                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest">Geen meldingen</p>
+                      </div>
+                    ) : (
+                      notifications.map(notification => (
+                        <div 
+                          key={notification.id} 
+                          className={cn(
+                            "p-4 border-b border-stone-50 last:border-0 transition-colors cursor-pointer hover:bg-stone-50",
+                            !notification.read && "bg-delijn-yellow/5"
+                          )}
+                          onClick={async () => {
+                            if (!notification.read) {
+                              await updateDoc(doc(db, 'notifications', notification.id), { read: true });
+                            }
+                            if (notification.link) {
+                              setActiveTab(notification.link as any);
+                              setShowNotifications(false);
+                            }
+                          }}
+                        >
+                          <div className="flex gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                              "bg-stone-100 text-stone-500"
+                            )}>
+                              <Info size={16} />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-bold leading-tight mb-1">{notification.title}</p>
+                              <p className="text-xs text-stone-500 leading-tight">{notification.message}</p>
+                              <p className="text-[10px] text-stone-400 mt-2 font-bold uppercase tracking-widest">
+                                {format(new Date(notification.createdAt), 'd MMM HH:mm', { locale: nl })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={() => setActiveTab('settings')}
               className={cn("p-2 transition-colors", activeTab === 'settings' ? "text-delijn-black" : "text-stone-400 hover:text-delijn-black")}
@@ -516,6 +631,12 @@ function AppContent() {
             label="Chat"
           />
           <TabButton 
+            active={activeTab === 'polls'} 
+            onClick={() => setActiveTab('polls')}
+            icon={<BarChart3 size={18} />}
+            label="Polls"
+          />
+          <TabButton 
             active={activeTab === 'rules'} 
             onClick={() => setActiveTab('rules')}
             icon={<Info size={18} />}
@@ -547,6 +668,9 @@ function AppContent() {
         {activeTab === 'chat' && (
           <ChatBox messages={messages} user={user} profile={profile} />
         )}
+        {activeTab === 'polls' && (
+          <PollsView polls={polls} pollVotes={pollVotes} userId={user.uid} />
+        )}
         {activeTab === 'rules' && (
           <RulesView />
         )}
@@ -554,7 +678,7 @@ function AppContent() {
           <SettingsView profile={profile} user={user} />
         )}
         {activeTab === 'admin' && user.role === 'admin' && (
-          <AdminView matches={matches} bonusQuestions={bonusQuestions} />
+          <AdminView matches={matches} bonusQuestions={bonusQuestions} polls={polls} />
         )}
       </main>
     </div>
@@ -603,8 +727,9 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
               <MatchCard 
                 key={match.id} 
                 match={match} 
-                prediction={predictions.find(p => p.matchId === match.id)}
+                prediction={predictions.find(p => p.matchId === match.id && p.userId === userId)}
                 userId={userId}
+                allPredictions={predictions}
               />
             ))}
           </div>
@@ -624,9 +749,10 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
               <MatchCard 
                 key={match.id} 
                 match={match} 
-                prediction={predictions.find(p => p.matchId === match.id)}
+                prediction={predictions.find(p => p.matchId === match.id && p.userId === userId)}
                 userId={userId}
                 readonly
+                allPredictions={predictions}
               />
             ))}
           </div>
@@ -636,10 +762,27 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
   );
 }
 
-const MatchCard: React.FC<{ match: Match; prediction?: Prediction; userId: string; readonly?: boolean }> = ({ match, prediction, userId, readonly }) => {
+const MatchCard: React.FC<{ 
+  match: Match; 
+  prediction?: Prediction; 
+  userId: string; 
+  readonly?: boolean;
+  allPredictions?: Prediction[];
+}> = ({ match, prediction, userId, readonly, allPredictions = [] }) => {
   const [homeScore, setHomeScore] = useState(prediction?.homeScore?.toString() || '');
   const [awayScore, setAwayScore] = useState(prediction?.awayScore?.toString() || '');
   const [saving, setSaving] = useState(false);
+
+  const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
+  const totalPredictions = matchPredictions.length;
+  
+  const stats = {
+    home: matchPredictions.filter(p => p.homeScore > p.awayScore).length,
+    draw: matchPredictions.filter(p => p.homeScore === p.awayScore).length,
+    away: matchPredictions.filter(p => p.homeScore < p.awayScore).length,
+  };
+
+  const getPercent = (count: number) => totalPredictions > 0 ? Math.round((count / totalPredictions) * 100) : 0;
 
   const handleSave = async () => {
     if (homeScore === '' || awayScore === '') return;
@@ -671,7 +814,7 @@ const MatchCard: React.FC<{ match: Match; prediction?: Prediction; userId: strin
 
   return (
     <div className={cn(
-      "bg-white p-6 rounded-2xl border border-stone-200 shadow-sm transition-all",
+      "bg-white p-6 rounded-2xl border border-stone-200 shadow-sm transition-all flex flex-col gap-6",
       readonly && "opacity-80 grayscale-[0.5]"
     )}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -741,6 +884,130 @@ const MatchCard: React.FC<{ match: Match; prediction?: Prediction; userId: strin
           )}
         </div>
       </div>
+
+      {totalPredictions > 0 && (
+        <div className="pt-4 border-t border-stone-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-1">
+              <BarChart3 size={12} />
+              Community Voorspellingen ({totalPredictions})
+            </p>
+          </div>
+          <div className="flex h-2 rounded-full overflow-hidden bg-stone-100">
+            <div 
+              className="bg-delijn-black transition-all duration-500" 
+              style={{ width: `${getPercent(stats.home)}%` }}
+              title={`Winst ${match.homeTeam}: ${getPercent(stats.home)}%`}
+            />
+            <div 
+              className="bg-stone-300 transition-all duration-500" 
+              style={{ width: `${getPercent(stats.draw)}%` }}
+              title={`Gelijkspel: ${getPercent(stats.draw)}%`}
+            />
+            <div 
+              className="bg-delijn-yellow transition-all duration-500" 
+              style={{ width: `${getPercent(stats.away)}%` }}
+              title={`Winst ${match.awayTeam}: ${getPercent(stats.away)}%`}
+            />
+          </div>
+          <div className="flex justify-between mt-1 text-[10px] font-bold text-stone-500">
+            <span>{match.homeTeam} {getPercent(stats.home)}%</span>
+            <span>Gelijk {getPercent(stats.draw)}%</span>
+            <span>{match.awayTeam} {getPercent(stats.away)}%</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PollsView({ polls, pollVotes, userId }: { polls: Poll[]; pollVotes: PollVote[]; userId: string }) {
+  const handleVote = async (pollId: string, optionIndex: number) => {
+    try {
+      const voteRef = doc(db, 'pollVotes', `${userId}_${pollId}`);
+      await setDoc(voteRef, {
+        userId,
+        pollId,
+        optionIndex,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'pollVotes');
+    }
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <h2 className="text-3xl font-bold flex items-center gap-3">
+        <BarChart3 className="text-delijn-black" size={32} />
+        Polls & Vragen
+      </h2>
+
+      <div className="grid gap-6">
+        {polls.map(poll => {
+          const userVote = pollVotes.find(v => v.pollId === poll.id);
+          const totalVotes = poll.results?.reduce((a, b) => a + b, 0) || 0;
+
+          return (
+            <div key={poll.id} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+              <h3 className="text-xl font-bold mb-6">{poll.question}</h3>
+              <div className="space-y-3">
+                {poll.options.map((option, idx) => {
+                  const votes = poll.results?.[idx] || 0;
+                  const percent = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+                  const isSelected = userVote?.optionIndex === idx;
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => !userVote && handleVote(poll.id, idx)}
+                      disabled={!!userVote}
+                      className={cn(
+                        "w-full relative h-14 rounded-2xl border transition-all overflow-hidden group",
+                        isSelected 
+                          ? "border-delijn-yellow bg-delijn-yellow/5" 
+                          : userVote 
+                            ? "border-stone-100 bg-stone-50" 
+                            : "border-stone-200 hover:border-delijn-yellow hover:bg-stone-50"
+                      )}
+                    >
+                      {userVote && (
+                        <div 
+                          className={cn(
+                            "absolute inset-y-0 left-0 transition-all duration-1000",
+                            isSelected ? "bg-delijn-yellow/20" : "bg-stone-200/50"
+                          )}
+                          style={{ width: `${percent}%` }}
+                        />
+                      )}
+                      <div className="absolute inset-0 px-6 flex items-center justify-between font-bold">
+                        <span className={cn(
+                          "transition-colors",
+                          isSelected ? "text-delijn-black" : "text-stone-600"
+                        )}>
+                          {option}
+                        </span>
+                        {userVote && (
+                          <span className="text-stone-400 text-sm">{percent}%</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {userVote && (
+                <p className="mt-4 text-xs font-bold text-stone-400 text-center uppercase tracking-widest">
+                  Bedankt voor je stem!
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {polls.length === 0 && (
+        <EmptyState message="Geen actieve polls op dit moment." />
+      )}
     </div>
   );
 }
@@ -867,8 +1134,8 @@ function LeaderboardView({ leaderboard, currentUserId }: { leaderboard: UserProf
   );
 }
 
-function AdminView({ matches, bonusQuestions }: { matches: Match[]; bonusQuestions: BonusQuestion[] }) {
-  const [adminTab, setAdminTab] = useState<'matches' | 'bonus'>('matches');
+function AdminView({ matches, bonusQuestions, polls }: { matches: Match[]; bonusQuestions: BonusQuestion[]; polls: Poll[] }) {
+  const [adminTab, setAdminTab] = useState<'matches' | 'bonus' | 'polls'>('matches');
   const [isAdding, setIsAdding] = useState(false);
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
@@ -1079,6 +1346,16 @@ function AdminView({ matches, bonusQuestions }: { matches: Match[]; bonusQuestio
           <HelpCircle size={18} />
           Bonusvragen
         </button>
+        <button 
+          onClick={() => setAdminTab('polls')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+            adminTab === 'polls' ? "bg-delijn-black text-white" : "bg-white text-stone-500 border border-stone-200"
+          )}
+        >
+          <BarChart3 size={18} />
+          Polls
+        </button>
       </div>
 
       {adminTab === 'matches' ? (
@@ -1180,8 +1457,10 @@ function AdminView({ matches, bonusQuestions }: { matches: Match[]; bonusQuestio
             ))}
           </div>
         </>
-      ) : (
+      ) : adminTab === 'bonus' ? (
         <AdminBonusQuestionsView questions={bonusQuestions} />
+      ) : (
+        <AdminPollsView polls={polls} />
       )}
     </div>
   );
@@ -1621,6 +1900,151 @@ function SettingsView({ profile, user }: { profile: UserProfile | null; user: Us
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function AdminPollsView({ polls }: { polls: Poll[] }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState(['', '']);
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const docRef = doc(collection(db, 'polls'));
+      await setDoc(docRef, {
+        id: docRef.id,
+        question,
+        options: options.filter(o => o.trim() !== ''),
+        results: options.filter(o => o.trim() !== '').map(() => 0),
+        createdAt: serverTimestamp()
+      });
+      setIsAdding(false);
+      setQuestion('');
+      setOptions(['', '']);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'polls');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Weet je zeker dat je deze poll wilt verwijderen?')) return;
+    try {
+      await deleteDoc(doc(db, 'polls', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'polls');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Pollbeheer</h2>
+        <button 
+          onClick={() => setIsAdding(!isAdding)}
+          className="flex items-center gap-2 bg-delijn-yellow text-delijn-black px-4 py-2 rounded-xl font-bold hover:bg-delijn-yellow/80 transition-all"
+        >
+          <Plus size={18} />
+          Poll Toevoegen
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="space-y-6 mb-8">
+            <div>
+              <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Vraag</label>
+              <input 
+                type="text" 
+                required
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+                placeholder="bijv. Wie wordt topscorer?"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Opties</label>
+              <div className="space-y-3">
+                {options.map((option, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input 
+                      type="text" 
+                      required
+                      value={option}
+                      onChange={(e) => {
+                        const newOptions = [...options];
+                        newOptions[idx] = e.target.value;
+                        setOptions(newOptions);
+                      }}
+                      className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+                      placeholder={`Optie ${idx + 1}`}
+                    />
+                    {options.length > 2 && (
+                      <button 
+                        type="button"
+                        onClick={() => setOptions(options.filter((_, i) => i !== idx))}
+                        className="p-3 text-stone-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button 
+                  type="button"
+                  onClick={() => setOptions([...options, ''])}
+                  className="text-xs font-bold text-delijn-black hover:underline flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Optie toevoegen
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-delijn-black text-white py-4 rounded-xl font-bold hover:bg-stone-800 transition-all disabled:opacity-50"
+            >
+              {saving ? 'Bezig...' : 'Poll Opslaan'}
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsAdding(false)}
+              className="px-8 bg-stone-100 text-stone-600 py-4 rounded-xl font-bold hover:bg-stone-200 transition-all"
+            >
+              Annuleren
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="grid gap-4">
+        {polls.map(poll => (
+          <div key={poll.id} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold">{poll.question}</h3>
+              <p className="text-sm text-stone-500">{poll.options.join(', ')}</p>
+              <p className="text-xs text-stone-400 mt-1 font-bold uppercase tracking-widest">
+                {poll.results?.reduce((a, b) => a + b, 0) || 0} stemmen
+              </p>
+            </div>
+            <button 
+              onClick={() => handleDelete(poll.id)}
+              className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
