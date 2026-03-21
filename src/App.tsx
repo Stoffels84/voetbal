@@ -247,7 +247,23 @@ function AppContent() {
       }
     } catch (error: any) {
       console.error("Auth failed", error);
-      setAuthError(error.message || "Authenticatie mislukt.");
+      let message = "Authenticatie mislukt.";
+      
+      if (error.code === 'auth/invalid-credential') {
+        message = "Onjuiste e-mail of wachtwoord.";
+      } else if (error.code === 'auth/too-many-requests') {
+        message = "Te veel mislukte pogingen. Probeer het later opnieuw.";
+      } else if (error.code === 'auth/email-already-in-use') {
+        message = "Dit e-mailadres is al in gebruik.";
+      } else if (error.code === 'auth/weak-password') {
+        message = "Het wachtwoord is te zwak.";
+      } else if (error.code === 'auth/invalid-email') {
+        message = "Ongeldig e-mailadres.";
+      } else if (error.message) {
+        message = error.message;
+      }
+      
+      setAuthError(message);
     } finally {
       setAuthLoading(false);
     }
@@ -667,7 +683,7 @@ function RulesView() {
             <div className="space-y-8">
               <div className="flex items-center gap-6">
                 <div className="bg-delijn-yellow text-delijn-black w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0 shadow-lg shadow-delijn-yellow/20">
-                  5
+                  3
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-delijn-black">Correcte Uitslag</h3>
@@ -677,7 +693,7 @@ function RulesView() {
               <div className="h-px bg-stone-100" />
               <div className="flex items-center gap-6">
                 <div className="bg-stone-100 text-delijn-black w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">
-                  2
+                  1
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-delijn-black">Correcte Winnaar / Gelijkspel</h3>
@@ -760,6 +776,11 @@ function AdminView({ matches }: { matches: Match[] }) {
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const handleAddMatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -809,17 +830,17 @@ function AdminView({ matches }: { matches: Match[] }) {
         let points = 0;
         
         // Logic: 
-        // Correct score: 5 points
-        // Correct winner/draw: 2 points
+        // Correct score: 3 points
+        // Correct winner/draw: 1 point
         // Otherwise: 0 points
         
         const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
         const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
 
         if (pred.homeScore === home && pred.awayScore === away) {
-          points = 5;
+          points = 3;
         } else if (actualWinner === predWinner) {
-          points = 2;
+          points = 1;
         }
 
         const oldPoints = pred.pointsEarned || 0;
@@ -850,73 +871,91 @@ function AdminView({ matches }: { matches: Match[] }) {
   };
 
   const handleRecalculateAll = async () => {
-    if (!confirm('Wil je alle scores opnieuw berekenen? Dit kan even duren.')) return;
-    setSaving(true);
-    try {
-      const finishedMatches = matches.filter(m => m.status === 'finished');
-      const profilesSnapshot = await getDocs(collection(db, 'profiles'));
-      const userPoints: Record<string, number> = {};
-      profilesSnapshot.docs.forEach(d => userPoints[d.id] = 0);
+    setConfirmAction({
+      title: 'Scores herberekenen',
+      message: 'Wil je alle scores opnieuw berekenen? Dit kan even duren.',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setSaving(true);
+        try {
+          const finishedMatches = matches.filter(m => m.status === 'finished');
+          const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+          const userPoints: Record<string, number> = {};
+          profilesSnapshot.docs.forEach(d => userPoints[d.id] = 0);
 
-      const predsSnapshot = await getDocs(collection(db, 'predictions'));
-      const batch = writeBatch(db);
-      
-      predsSnapshot.docs.forEach(predDoc => {
-        const pred = predDoc.data() as Prediction;
-        const match = finishedMatches.find(m => m.id === pred.matchId);
-        
-        let points = 0;
-        if (match && match.homeScore !== undefined && match.awayScore !== undefined) {
-          const actualWinner = match.homeScore > match.awayScore ? 'home' : match.homeScore < match.awayScore ? 'away' : 'draw';
-          const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
+          const predsSnapshot = await getDocs(collection(db, 'predictions'));
+          const batch = writeBatch(db);
+          
+          predsSnapshot.docs.forEach(predDoc => {
+            const pred = predDoc.data() as Prediction;
+            const match = finishedMatches.find(m => m.id === pred.matchId);
+            
+            let points = 0;
+            if (match && match.homeScore !== undefined && match.awayScore !== undefined) {
+              const actualWinner = match.homeScore > match.awayScore ? 'home' : match.homeScore < match.awayScore ? 'away' : 'draw';
+              const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
 
-          if (pred.homeScore === match.homeScore && pred.awayScore === match.awayScore) {
-            points = 5;
-          } else if (actualWinner === predWinner) {
-            points = 2;
+              if (pred.homeScore === match.homeScore && pred.awayScore === match.awayScore) {
+                points = 3;
+              } else if (actualWinner === predWinner) {
+                points = 1;
+              }
+            }
+            
+            batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: points });
+            userPoints[pred.userId] = (userPoints[pred.userId] || 0) + points;
+          });
+
+          for (const [userId, points] of Object.entries(userPoints)) {
+            batch.update(doc(db, 'profiles', userId), { totalPoints: points });
           }
+
+          await batch.commit();
+          setSuccess('Alle scores zijn opnieuw berekend!');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'recalculate-all');
+        } finally {
+          setSaving(false);
         }
-        
-        batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: points });
-        userPoints[pred.userId] = (userPoints[pred.userId] || 0) + points;
-      });
-
-      for (const [userId, points] of Object.entries(userPoints)) {
-        batch.update(doc(db, 'profiles', userId), { totalPoints: points });
       }
-
-      await batch.commit();
-      setSuccess('Alle scores zijn opnieuw berekend!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'recalculate-all');
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   const handleResetMatch = async (matchId: string) => {
-    if (!confirm('Match terugzetten naar gepland? Scores worden niet automatisch verwijderd uit klassement.')) return;
-    try {
-      await updateDoc(doc(db, 'matches', matchId), {
-        status: 'scheduled',
-        homeScore: null,
-        awayScore: null
-      });
-      setSuccess('Match is gereset naar gepland.');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'reset-match');
-    }
+    setConfirmAction({
+      title: 'Match resetten',
+      message: 'Match terugzetten naar gepland? Scores worden niet automatisch verwijderd uit klassement.',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        try {
+          await updateDoc(doc(db, 'matches', matchId), {
+            status: 'scheduled',
+            homeScore: null,
+            awayScore: null
+          });
+          setSuccess('Match is gereset naar gepland.');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'reset-match');
+        }
+      }
+    });
   };
 
   const handleDeleteMatch = async (id: string) => {
-    if (!confirm('Match verwijderen?')) return;
-    try {
-      await deleteDoc(doc(db, 'matches', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'matches');
-    }
+    setConfirmAction({
+      title: 'Match verwijderen',
+      message: 'Weet je zeker dat je deze match wilt verwijderen?',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        try {
+          await deleteDoc(doc(db, 'matches', id));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, 'matches');
+        }
+      }
+    });
   };
 
   return (
@@ -948,6 +987,15 @@ function AdminView({ matches }: { matches: Match[] }) {
           <CheckCircle2 size={20} />
           <p className="font-bold">{success}</p>
         </div>
+      )}
+
+      {confirmAction && (
+        <ConfirmationModal 
+          title={confirmAction.title}
+          message={confirmAction.message}
+          onConfirm={confirmAction.onConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
 
       {isAdding && (
@@ -1091,6 +1139,44 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="bg-white p-12 rounded-3xl border border-dashed border-stone-300 text-center">
       <p className="text-stone-400 font-medium">{message}</p>
+    </div>
+  );
+}
+
+function ConfirmationModal({ 
+  title, 
+  message, 
+  onConfirm, 
+  onCancel 
+}: { 
+  title: string; 
+  message: string; 
+  onConfirm: () => void; 
+  onCancel: () => void; 
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-stone-100 animate-in zoom-in duration-200">
+        <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+          <AlertCircle className="text-amber-600" size={32} />
+        </div>
+        <h3 className="text-xl font-bold text-stone-900 text-center mb-2">{title}</h3>
+        <p className="text-stone-500 text-center mb-8">{message}</p>
+        <div className="flex gap-3">
+          <button 
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl font-bold text-stone-500 hover:bg-stone-50 transition-colors"
+          >
+            Annuleren
+          </button>
+          <button 
+            onClick={onConfirm}
+            className="flex-1 py-3 rounded-xl font-bold bg-red-600 text-white hover:bg-red-700 transition-colors"
+          >
+            Bevestigen
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
