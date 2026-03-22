@@ -34,7 +34,16 @@
           },
           "description": "History of user's rank over time"
         },
-        "topScorer": { "type": "string", "description": "User's prediction for the tournament top scorer" }
+        "topScorer": { "type": "string", "description": "User's prediction for the tournament top scorer" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "avgPoints": { "type": "number" },
+            "mostPredictedScore": { "type": "string" },
+            "perfectScores": { "type": "number" }
+          },
+          "description": "User's performance statistics"
+        }
       },
       "required": ["uid", "displayName", "totalPoints"]
     },
@@ -49,7 +58,10 @@
         "date": { "type": "string", "format": "date-time", "description": "Date and time of the match" },
         "homeScore": { "type": "number", "description": "Actual home team score (null if not played)" },
         "awayScore": { "type": "number", "description": "Actual away team score (null if not played)" },
-        "status": { "type": "string", "enum": ["scheduled", "finished"], "description": "Current status of the match" }
+        "firstGoalMinute": { "type": "number", "description": "Minute of the first goal (null if no goals)" },
+        "status": { "type": "string", "enum": ["scheduled", "finished"], "description": "Current status of the match" },
+        "type": { "type": "string", "enum": ["group", "round_of_16", "quarter_final", "semi_final", "final"], "description": "Type of match for bracket" },
+        "matchNumber": { "type": "number", "description": "Number for bracket positioning" }
       },
       "required": ["id", "homeTeam", "awayTeam", "date", "status"]
     },
@@ -63,9 +75,39 @@
         "matchId": { "type": "string", "description": "ID of the match being predicted" },
         "homeScore": { "type": "number", "description": "Predicted home team score" },
         "awayScore": { "type": "number", "description": "Predicted away team score" },
+        "firstGoalMinute": { "type": "number", "description": "Predicted minute of the first goal" },
         "pointsEarned": { "type": "number", "description": "Points earned for this prediction (calculated after match)" }
       },
       "required": ["id", "userId", "matchId", "homeScore", "awayScore"]
+    },
+    "League": {
+      "title": "League",
+      "description": "A private league for a group of users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "memberCount": { "type": "number" }
+      },
+      "required": ["id", "name", "createdBy", "inviteCode", "createdAt", "memberCount"]
+    },
+    "LeagueMember": {
+      "title": "LeagueMember",
+      "description": "A member of a private league",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leagueId": { "type": "string" },
+        "userId": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "displayName": { "type": "string" },
+        "totalPoints": { "type": "number" }
+      },
+      "required": ["id", "leagueId", "userId", "joinedAt", "displayName", "totalPoints"]
     },
     "BonusQuestion": {
       "title": "BonusQuestion",
@@ -170,6 +212,8 @@
     "/polls/{pollId}": { "schema": "Poll", "description": "Collection of quick polls" },
     "/pollVotes/{id}": { "schema": "PollVote", "description": "Collection of poll votes" },
     "/notifications/{notificationId}": { "schema": "Notification", "description": "Collection of user notifications" },
-    "/tournamentSettings/{id}": { "schema": "TournamentSettings", "description": "Collection for global tournament settings" }
+    "/tournamentSettings/{id}": { "schema": "TournamentSettings", "description": "Collection for global tournament settings" },
+    "/leagues/{leagueId}": { "schema": "League", "description": "Collection of private leagues" },
+    "/leagueMembers/{id}": { "schema": "LeagueMember", "description": "Collection of league memberships" }
   }
 }

@@ -56,7 +56,12 @@ import {
   Bell,
   BarChart3,
   Vote,
-  Smartphone
+  Smartphone,
+  Users,
+  Share2,
+  PieChart,
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -71,11 +76,12 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Poll, PollVote, AppNotification, TournamentSettings } from './types';
+import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Poll, PollVote, AppNotification, TournamentSettings, League, LeagueMember } from './types';
 import { 
   addDoc,
   serverTimestamp,
-  increment
+  increment,
+  arrayUnion
 } from 'firebase/firestore';
 
 function cn(...inputs: ClassValue[]) {
@@ -137,6 +143,426 @@ class ErrorBoundary extends React.Component<any, any> {
     }
     return (this as any).props.children;
   }
+}
+
+function LeaguesView({ 
+  leagues, 
+  memberships, 
+  userId, 
+  userProfile,
+  onViewLeague 
+}: { 
+  leagues: League[], 
+  memberships: LeagueMember[], 
+  userId: string, 
+  userProfile: UserProfile,
+  onViewLeague: (league: League) => void 
+}) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [leagueName, setLeagueName] = useState('');
+  const [leagueDesc, setLeagueDesc] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const myLeagues = leagues.filter(l => memberships.some(m => m.leagueId === l.id));
+
+  const handleCreateLeague = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leagueName) return;
+    setLoading(true);
+    setError('');
+    try {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const leagueRef = doc(collection(db, 'leagues'));
+      const leagueData: League = {
+        id: leagueRef.id,
+        name: leagueName,
+        description: leagueDesc,
+        createdBy: userId,
+        inviteCode: code,
+        createdAt: serverTimestamp(),
+        memberCount: 1
+      };
+      await setDoc(leagueRef, leagueData);
+
+      const memberRef = doc(collection(db, 'leagueMembers'));
+      const memberData: LeagueMember = {
+        id: memberRef.id,
+        leagueId: leagueRef.id,
+        userId: userId,
+        joinedAt: serverTimestamp(),
+        displayName: userProfile.displayName,
+        totalPoints: userProfile.totalPoints
+      };
+      await setDoc(memberRef, memberData);
+
+      setIsCreating(false);
+      setLeagueName('');
+      setLeagueDesc('');
+    } catch (err) {
+      setError('Kon league niet aanmaken.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinLeague = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteCode) return;
+    setLoading(true);
+    setError('');
+    try {
+      const q = query(collection(db, 'leagues'), where('inviteCode', '==', inviteCode.toUpperCase()));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setError('Ongeldige code.');
+        return;
+      }
+      const league = snap.docs[0].data() as League;
+      
+      const memberQ = query(collection(db, 'leagueMembers'), where('leagueId', '==', league.id), where('userId', '==', userId));
+      const memberSnap = await getDocs(memberQ);
+      if (!memberSnap.empty) {
+        setError('Je bent al lid van deze league.');
+        return;
+      }
+
+      const memberRef = doc(collection(db, 'leagueMembers'));
+      const memberData: LeagueMember = {
+        id: memberRef.id,
+        leagueId: league.id,
+        userId: userId,
+        joinedAt: serverTimestamp(),
+        displayName: userProfile.displayName,
+        totalPoints: userProfile.totalPoints
+      };
+      await setDoc(memberRef, memberData);
+      await updateDoc(doc(db, 'leagues', league.id), { memberCount: increment(1) });
+
+      setIsJoining(false);
+      setInviteCode('');
+    } catch (err) {
+      setError('Kon niet deelnemen aan league.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">Privé Leagues</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Strijd tegen je eigen groepen en collega's</p>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => { setIsJoining(true); setIsCreating(false); }}
+            className="flex-1 sm:flex-none glass-card px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+          >
+            <LogIn size={14} /> Deelnemen
+          </button>
+          <button 
+            onClick={() => { setIsCreating(true); setIsJoining(false); }}
+            className="flex-1 sm:flex-none bg-delijn-black text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200"
+          >
+            <Plus size={14} /> Nieuwe League
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isCreating && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <form onSubmit={handleCreateLeague} className="glass-card p-8 rounded-[2.5rem] space-y-6 border-2 border-theme-primary/20">
+              <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Nieuwe League Aanmaken</h3>
+              <div className="grid gap-6">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Naam van de League</label>
+                  <input 
+                    value={leagueName}
+                    onChange={e => setLeagueName(e.target.value)}
+                    className="w-full glass-input p-4 rounded-2xl outline-none font-bold text-slate-900"
+                    placeholder="Bijv. De Lijn Gent - Chauffeurs"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Beschrijving (Optioneel)</label>
+                  <input 
+                    value={leagueDesc}
+                    onChange={e => setLeagueDesc(e.target.value)}
+                    className="w-full glass-input p-4 rounded-2xl outline-none font-bold text-slate-900"
+                    placeholder="Bijv. De leukste competitie van de stelplaats"
+                  />
+                </div>
+              </div>
+              {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsCreating(false)} className="px-6 py-3 text-slate-400 font-black text-[10px] uppercase tracking-widest">Annuleren</button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="bg-theme-primary text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-theme-primary/90 disabled:opacity-50 shadow-lg shadow-theme-primary/20"
+                >
+                  {loading ? 'Aanmaken...' : 'League Aanmaken'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+
+        {isJoining && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <form onSubmit={handleJoinLeague} className="glass-card p-8 rounded-[2.5rem] space-y-6 border-2 border-theme-primary/20">
+              <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Deelnemen aan League</h3>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Uitnodigingscode</label>
+                <input 
+                  value={inviteCode}
+                  onChange={e => setInviteCode(e.target.value)}
+                  className="w-full glass-input p-4 rounded-2xl outline-none font-black text-2xl text-center tracking-[0.5em] text-slate-900 uppercase"
+                  placeholder="CODE12"
+                  maxLength={6}
+                  required
+                />
+              </div>
+              {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsJoining(false)} className="px-6 py-3 text-slate-400 font-black text-[10px] uppercase tracking-widest">Annuleren</button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="bg-theme-primary text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-theme-primary/90 disabled:opacity-50 shadow-lg shadow-theme-primary/20"
+                >
+                  {loading ? 'Deelnemen...' : 'Lid Worden'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {myLeagues.length === 0 ? (
+          <div className="col-span-full">
+            <EmptyState message="Je bent nog geen lid van een privé league." />
+          </div>
+        ) : (
+          myLeagues.map((league, idx) => (
+            <motion.div 
+              key={league.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              onClick={() => onViewLeague(league)}
+              className="glass-card p-8 rounded-[2.5rem] cursor-pointer hover:shadow-2xl hover:shadow-slate-200 transition-all group border-t-4 border-theme-primary"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500">
+                  <Users size={24} className="text-slate-400" />
+                </div>
+                <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  {league.memberCount} Leden
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight mb-2">{league.name}</h3>
+              <p className="text-xs text-slate-400 font-medium line-clamp-2 mb-6">{league.description || 'Geen beschrijving beschikbaar.'}</p>
+              <div className="flex items-center justify-between pt-6 border-t border-slate-50">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Code:</span>
+                  <span className="text-xs font-black text-slate-900 tracking-widest">{league.inviteCode}</span>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center group-hover:translate-x-2 transition-transform">
+                  <ArrowRight size={16} />
+                </div>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeagueDetailView({ 
+  league, 
+  onBack, 
+  currentUserId,
+  userRole
+}: { 
+  league: League, 
+  onBack: () => void, 
+  currentUserId: string,
+  userRole: string
+}) {
+  const [members, setMembers] = useState<LeagueMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'leagueMembers'), where('leagueId', '==', league.id), orderBy('totalPoints', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setMembers(snap.docs.map(doc => doc.data() as LeagueMember));
+      setLoading(false);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'leagueMembers'));
+    return () => unsubscribe();
+  }, [league.id]);
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(league.inviteCode);
+  };
+
+  const handleDeleteLeague = async () => {
+    setIsDeleting(true);
+    setShowConfirmDelete(false);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete all members
+      const membersSnap = await getDocs(query(collection(db, 'leagueMembers'), where('leagueId', '==', league.id)));
+      membersSnap.docs.forEach(memberDoc => {
+        batch.delete(memberDoc.ref);
+      });
+      
+      // Delete the league
+      batch.delete(doc(db, 'leagues', league.id));
+      
+      await batch.commit();
+      onBack();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'leagues');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const canDelete = league.createdBy === currentUserId;
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={onBack} className="p-4 glass-card hover:bg-slate-50 rounded-[1.5rem] transition-all active:scale-95 shadow-lg shadow-slate-200/50">
+          <ArrowRight className="rotate-180 text-slate-900" size={20} />
+        </button>
+        <div className="flex-1">
+          <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">{league.name}</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">League Klassement</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {canDelete && (
+            <button 
+              onClick={() => setShowConfirmDelete(true)}
+              disabled={isDeleting}
+              className="p-4 glass-card hover:bg-red-50 text-red-500 rounded-[1.5rem] transition-all active:scale-95 shadow-lg shadow-slate-200/50 disabled:opacity-50"
+              title="League Verwijderen"
+            >
+              <Trash2 size={20} />
+            </button>
+          )}
+          <button 
+            onClick={copyCode}
+            className="glass-card px-4 py-3 rounded-2xl flex items-center gap-2 hover:bg-slate-50 transition-all group"
+          >
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Code: {league.inviteCode}</span>
+            <Copy size={14} className="text-slate-400 group-hover:text-slate-900 transition-colors" />
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showConfirmDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowConfirmDelete(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md glass-card rounded-[2.5rem] p-8 space-y-6 shadow-2xl"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto text-red-500">
+                <Trash2 size={32} />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">League Verwijderen?</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Weet je zeker dat je <span className="font-bold text-slate-900">"{league.name}"</span> wilt verwijderen? 
+                  Alle leden en hun scores in deze league gaan verloren. Dit kan niet ongedaan worden gemaakt.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="flex-1 py-4 px-6 rounded-2xl bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                >
+                  Annuleren
+                </button>
+                <button 
+                  onClick={handleDeleteLeague}
+                  className="flex-1 py-4 px-6 rounded-2xl bg-red-500 text-white font-black uppercase tracking-widest text-[10px] hover:bg-red-600 transition-all shadow-lg shadow-red-200"
+                >
+                  Verwijderen
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <div className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50">
+        <div className="divide-y divide-slate-50">
+          {loading ? (
+            <div className="p-12 text-center text-slate-400 font-black uppercase tracking-widest text-[10px]">Laden...</div>
+          ) : members.length === 0 ? (
+            <EmptyState message="Nog geen leden in deze league." />
+          ) : (
+            members.map((member, index) => (
+              <div 
+                key={member.id} 
+                className={cn(
+                  "flex items-center gap-5 p-6 transition-all duration-500",
+                  member.userId === currentUserId ? "bg-theme-primary/[0.03]" : "hover:bg-slate-50/80"
+                )}
+              >
+                <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center font-black font-display text-slate-400">
+                  {index + 1}
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-white shadow-lg overflow-hidden border-2 border-white">
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.displayName}`} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-black text-slate-900 uppercase tracking-tight text-base">{member.displayName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-black font-display text-slate-900">{member.totalPoints}</p>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Punten</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PredictionStats({ matchId, predictions }: { matchId: string, predictions: Prediction[] }) {
@@ -329,7 +755,7 @@ function AppContent() {
   const [user, setUser] = useState<UserPrivate | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls' | 'h2h'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls' | 'h2h' | 'leagues'>('predictions');
   const [h2hTargetId, setH2hTargetId] = useState<string | null>(null);
   const [previewTeam, setPreviewTeam] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -343,6 +769,9 @@ function AppContent() {
   const [pollVotes, setPollVotes] = useState<PollVote[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings | null>(null);
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [memberships, setMemberships] = useState<LeagueMember[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
 
   const theme = useMemo(() => {
     const team = (previewTeam && activeTab === 'settings') ? previewTeam : profile?.favoriteTeam;
@@ -523,28 +952,46 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'notifications')
     );
 
-    const tournamentSettingsUnsubscribe = onSnapshot(
-      doc(db, 'tournamentSettings', 'results'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setTournamentSettings({ id: snapshot.id, ...snapshot.data() } as TournamentSettings);
-        }
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, 'tournamentSettings')
-    );
+      const tournamentSettingsUnsubscribe = onSnapshot(
+        doc(db, 'tournamentSettings', 'results'),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            setTournamentSettings({ id: snapshot.id, ...snapshot.data() } as TournamentSettings);
+          }
+        },
+        (error) => handleFirestoreError(error, OperationType.GET, 'tournamentSettings')
+      );
 
-    return () => {
-      matchesUnsubscribe();
-      predictionsUnsubscribe();
-      leaderboardUnsubscribe();
-      profileUnsubscribe();
-      bonusQuestionsUnsubscribe();
-      bonusAnswersUnsubscribe();
-      pollsUnsubscribe();
-      pollVotesUnsubscribe();
-      notificationsUnsubscribe();
-      tournamentSettingsUnsubscribe();
-    };
+      const leaguesUnsubscribe = onSnapshot(
+        collection(db, 'leagues'),
+        (snapshot) => {
+          setLeagues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as League)));
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'leagues')
+      );
+
+      const membershipsUnsubscribe = onSnapshot(
+        query(collection(db, 'leagueMembers'), where('userId', '==', user.uid)),
+        (snapshot) => {
+          setMemberships(snapshot.docs.map(doc => doc.data() as LeagueMember));
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'leagueMembers')
+      );
+
+      return () => {
+        matchesUnsubscribe();
+        predictionsUnsubscribe();
+        leaderboardUnsubscribe();
+        profileUnsubscribe();
+        bonusQuestionsUnsubscribe();
+        bonusAnswersUnsubscribe();
+        pollsUnsubscribe();
+        pollVotesUnsubscribe();
+        notificationsUnsubscribe();
+        tournamentSettingsUnsubscribe();
+        leaguesUnsubscribe();
+        membershipsUnsubscribe();
+      };
   }, [user]);
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -838,7 +1285,12 @@ function AppContent() {
         <CountdownTimer matches={matches} />
 
         {activeTab === 'predictions' && (
-          <PredictionsView matches={matches} predictions={predictions} userId={user.uid} />
+          <PredictionsView 
+            matches={matches} 
+            predictions={predictions} 
+            userId={user.uid} 
+            isAdmin={user.role === 'admin'} 
+          />
         )}
         {activeTab === 'leaderboard' && (
           <LeaderboardView 
@@ -848,6 +1300,8 @@ function AppContent() {
               setH2hTargetId(targetId);
               setActiveTab('h2h');
             }}
+            predictions={predictions}
+            matches={matches}
           />
         )}
         {activeTab === 'h2h' && h2hTargetId && (
@@ -861,6 +1315,23 @@ function AppContent() {
         )}
         {activeTab === 'bonus' && (
           <BonusQuestionsView questions={bonusQuestions} answers={bonusAnswers} userId={user.uid} />
+        )}
+        {activeTab === 'leagues' && !selectedLeague && (
+          <LeaguesView 
+            leagues={leagues} 
+            memberships={memberships} 
+            userId={user.uid} 
+            userProfile={profile!}
+            onViewLeague={setSelectedLeague}
+          />
+        )}
+        {activeTab === 'leagues' && selectedLeague && (
+          <LeagueDetailView 
+            league={selectedLeague} 
+            onBack={() => setSelectedLeague(null)} 
+            currentUserId={user.uid} 
+            userRole={user.role}
+          />
         )}
         {activeTab === 'polls' && (
           <PollsView polls={polls} pollVotes={pollVotes} userId={user.uid} />
@@ -899,6 +1370,12 @@ function AppContent() {
             onClick={() => setActiveTab('leaderboard')}
             icon={<Trophy />}
             label="Klassement"
+          />
+          <TabButton 
+            active={activeTab === 'leagues'} 
+            onClick={() => { setActiveTab('leagues'); setSelectedLeague(null); }}
+            icon={<Users />}
+            label="Leagues"
           />
           <TabButton 
             active={activeTab === 'bonus'} 
@@ -962,7 +1439,17 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
   );
 }
 
-function PredictionsView({ matches, predictions, userId }: { matches: Match[]; predictions: Prediction[]; userId: string }) {
+function PredictionsView({ 
+  matches, 
+  predictions, 
+  userId,
+  isAdmin 
+}: { 
+  matches: Match[]; 
+  predictions: Prediction[]; 
+  userId: string;
+  isAdmin: boolean;
+}) {
   const upcomingMatches = matches.filter(m => m.status === 'scheduled');
   const finishedMatches = matches.filter(m => m.status === 'finished');
 
@@ -1000,6 +1487,7 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
                 prediction={predictions.find(p => p.matchId === match.id && p.userId === userId)}
                 userId={userId}
                 allPredictions={predictions}
+                isAdmin={isAdmin}
               />
             ))}
           </motion.div>
@@ -1035,6 +1523,7 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
                 userId={userId}
                 readonly
                 allPredictions={predictions}
+                isAdmin={isAdmin}
               />
             ))}
           </motion.div>
@@ -1050,10 +1539,14 @@ const MatchCard: React.FC<{
   userId: string; 
   readonly?: boolean;
   allPredictions?: Prediction[];
-}> = ({ match, prediction, userId, readonly, allPredictions = [] }) => {
+  isAdmin?: boolean;
+}> = ({ match, prediction, userId, readonly, allPredictions = [], isAdmin }) => {
   const [homeScore, setHomeScore] = useState(prediction?.homeScore?.toString() || '');
   const [awayScore, setAwayScore] = useState(prediction?.awayScore?.toString() || '');
+  const [firstGoalMinute, setFirstGoalMinute] = useState(prediction?.firstGoalMinute?.toString() || '');
   const [saving, setSaving] = useState(false);
+
+  const isLocked = !isAdmin && (new Date(match.date).getTime() - 3600000 < Date.now());
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
   const totalPredictions = matchPredictions.length;
@@ -1075,6 +1568,7 @@ const MatchCard: React.FC<{
         matchId: match.id,
         homeScore: parseInt(homeScore),
         awayScore: parseInt(awayScore),
+        firstGoalMinute: firstGoalMinute !== '' ? parseInt(firstGoalMinute) : null,
       };
 
       if (prediction) {
@@ -1092,7 +1586,8 @@ const MatchCard: React.FC<{
 
   const isSaved = prediction && 
     prediction.homeScore.toString() === homeScore && 
-    prediction.awayScore.toString() === awayScore;
+    prediction.awayScore.toString() === awayScore &&
+    (prediction.firstGoalMinute?.toString() || '') === firstGoalMinute;
 
   return (
     <motion.div 
@@ -1142,7 +1637,7 @@ const MatchCard: React.FC<{
                     min="0"
                     value={homeScore}
                     onChange={(e) => setHomeScore(e.target.value)}
-                    disabled={readonly || saving}
+                    disabled={readonly || saving || isLocked}
                     className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
                     placeholder="-"
                   />
@@ -1152,27 +1647,60 @@ const MatchCard: React.FC<{
                     min="0"
                     value={awayScore}
                     onChange={(e) => setAwayScore(e.target.value)}
-                    disabled={readonly || saving}
+                    disabled={readonly || saving || isLocked}
                     className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
                     placeholder="-"
                   />
                 </div>
               )}
             </div>
+
+            <div className="flex flex-col items-center gap-2 mt-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Gouden Doelpunt (Minuut)</p>
+              {match.status === 'finished' ? (
+                <div className="flex flex-col items-center">
+                  <div className="bg-slate-900 text-white w-12 h-12 rounded-xl flex items-center justify-center font-black font-display">
+                    {match.firstGoalMinute ?? '-'}
+                  </div>
+                  {prediction?.firstGoalMinute === match.firstGoalMinute && match.firstGoalMinute !== undefined && match.firstGoalMinute !== null && (
+                    <span className="text-[8px] font-black text-theme-primary uppercase mt-1">Exact! (+2)</span>
+                  )}
+                </div>
+              ) : (
+                <input 
+                  type="number" 
+                  min="0"
+                  max="120"
+                  value={firstGoalMinute}
+                  onChange={(e) => setFirstGoalMinute(e.target.value)}
+                  disabled={readonly || saving || isLocked}
+                  className="w-16 h-10 text-center glass-input rounded-xl text-lg font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
+                  placeholder="-"
+                />
+              )}
+            </div>
             
             {!readonly && (
-              <button 
-                onClick={handleSave}
-                disabled={saving || isSaved || homeScore === '' || awayScore === ''}
-                className={cn(
-                  "w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 shadow-lg",
-                  isSaved 
-                    ? "bg-emerald-500 text-white shadow-emerald-200" 
-                    : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200 disabled:opacity-50"
+              <div className="w-full space-y-2">
+                <button 
+                  onClick={handleSave}
+                  disabled={saving || isSaved || homeScore === '' || awayScore === '' || isLocked}
+                  className={cn(
+                    "w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 shadow-lg",
+                    isSaved 
+                      ? "bg-emerald-500 text-white shadow-emerald-200" 
+                      : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200 disabled:opacity-50"
+                  )}
+                >
+                  {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full mx-auto" /> : isSaved ? 'Opgeslagen' : 'Voorspelling Opslaan'}
+                </button>
+                {isLocked && (
+                  <div className="flex items-center justify-center gap-2 text-red-500">
+                    <Lock size={12} />
+                    <span className="text-[8px] font-black uppercase tracking-widest">Gesloten (1u voor match)</span>
+                  </div>
                 )}
-              >
-                {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full mx-auto" /> : isSaved ? 'Opgeslagen' : 'Voorspelling Opslaan'}
-              </button>
+              </div>
             )}
           </div>
 
@@ -1403,21 +1931,137 @@ function RulesView() {
   );
 }
 
+function ProfileModal({ 
+  profile, 
+  predictions, 
+  matches, 
+  onClose 
+}: { 
+  profile: UserProfile, 
+  predictions: Prediction[], 
+  matches: Match[], 
+  onClose: () => void 
+}) {
+  const userPredictions = predictions.filter(p => p.userId === profile.uid);
+  const finishedMatches = matches.filter(m => m.status === 'finished');
+  
+  const stats = useMemo(() => {
+    const played = userPredictions.filter(p => finishedMatches.some(m => m.id === p.matchId));
+    const totalPoints = played.reduce((sum, p) => sum + (p.pointsEarned || 0), 0);
+    const perfectScores = played.filter(p => p.pointsEarned === 5).length; // Assuming 5 is perfect
+    const avgPoints = played.length > 0 ? (totalPoints / played.length).toFixed(1) : '0';
+    
+    // Most predicted score
+    const scores: Record<string, number> = {};
+    userPredictions.forEach(p => {
+      const key = `${p.homeScore}-${p.awayScore}`;
+      scores[key] = (scores[key] || 0) + 1;
+    });
+    const mostPredicted = Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+    return { avgPoints, perfectScores, mostPredicted, totalPlayed: played.length };
+  }, [userPredictions, finishedMatches]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative w-full max-w-lg glass-card rounded-[3rem] overflow-hidden shadow-2xl border-2 border-white/20"
+      >
+        <div className="p-8 space-y-8">
+          <div className="flex items-center gap-6">
+            <div className="w-24 h-24 rounded-[2rem] border-4 border-white shadow-xl overflow-hidden bg-white">
+              <img src={profile.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.displayName}`} className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 font-display uppercase tracking-tight">{profile.displayName}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <Trophy size={14} className="text-theme-primary" />
+                <span className="text-sm font-black text-theme-primary">{profile.totalPoints} Punten</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Gem. Punten</p>
+              <p className="text-2xl font-black font-display text-slate-900">{stats.avgPoints}</p>
+            </div>
+            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Perfecte Scores</p>
+              <p className="text-2xl font-black font-display text-slate-900">{stats.perfectScores}</p>
+            </div>
+            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Meest Voorspeld</p>
+              <p className="text-2xl font-black font-display text-slate-900">{stats.mostPredicted}</p>
+            </div>
+            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Totaal Gespeeld</p>
+              <p className="text-2xl font-black font-display text-slate-900">{stats.totalPlayed}</p>
+            </div>
+          </div>
+
+          {profile.rankHistory && profile.rankHistory.length > 1 && (
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2">Rank Verloop</p>
+              <RankChart history={profile.rankHistory} />
+            </div>
+          )}
+
+          <button 
+            onClick={onClose}
+            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-stone-800 transition-all"
+          >
+            Sluiten
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function LeaderboardView({ 
   leaderboard, 
   currentUserId, 
-  onCompare 
+  onCompare,
+  predictions,
+  matches
 }: { 
   leaderboard: UserProfile[]; 
   currentUserId: string;
   onCompare: (userId: string) => void;
+  predictions: Prediction[];
+  matches: Match[];
 }) {
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50"
-    >
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <AnimatePresence>
+        {selectedProfile && (
+          <ProfileModal 
+            profile={selectedProfile} 
+            predictions={predictions} 
+            matches={matches} 
+            onClose={() => setSelectedProfile(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50"
+      >
       <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-slate-900 font-display uppercase tracking-tight">Klassement</h2>
@@ -1452,9 +2096,10 @@ function LeaderboardView({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.05 }}
                 className={cn(
-                  "group flex items-center gap-5 p-6 transition-all duration-500 relative",
+                  "group flex items-center gap-5 p-6 transition-all duration-500 relative cursor-pointer",
                   entry.uid === currentUserId ? "bg-theme-primary/[0.03]" : "hover:bg-slate-50/80"
                 )}
+                onClick={() => setSelectedProfile(entry)}
               >
                 <div className="w-12 flex flex-col items-center justify-center shrink-0">
                   <div className={cn(
@@ -1494,27 +2139,31 @@ function LeaderboardView({
                   </div>
                 </div>
 
-                <div className="text-right shrink-0 flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-2xl font-black font-display text-slate-900">{entry.totalPoints}</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">pts</span>
+                  <div className="text-right shrink-0 flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-2xl font-black font-display text-slate-900">{entry.totalPoints}</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">pts</span>
+                    </div>
+                    {entry.uid !== currentUserId && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCompare(entry.uid);
+                        }}
+                        className="p-2.5 glass-card hover:bg-slate-900 hover:text-white transition-all rounded-xl shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-100 active:scale-90"
+                        title="Vergelijk met jou"
+                      >
+                        <Smartphone size={16} />
+                      </button>
+                    )}
                   </div>
-                  {entry.uid !== currentUserId && (
-                    <button 
-                      onClick={() => onCompare(entry.uid)}
-                      className="p-2.5 glass-card hover:bg-slate-900 hover:text-white transition-all rounded-xl shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-100 active:scale-90"
-                      title="Vergelijk met jou"
-                    >
-                      <Smartphone size={16} />
-                    </button>
-                  )}
-                </div>
               </motion.div>
             );
           })
         )}
       </div>
     </motion.div>
+    </div>
   );
 }
 
@@ -1630,7 +2279,7 @@ function AdminView({
     }
   };
 
-  const handleUpdateResult = async (match: Match, home: number, away: number) => {
+  const handleUpdateResult = async (match: Match, home: number, away: number, fgm?: number) => {
     try {
       const batch = writeBatch(db);
       
@@ -1639,6 +2288,7 @@ function AdminView({
       batch.update(matchRef, {
         homeScore: home,
         awayScore: away,
+        firstGoalMinute: fgm ?? null,
         status: 'finished'
       });
 
@@ -1655,7 +2305,7 @@ function AdminView({
         // Logic: 
         // Correct score: 3 points
         // Correct winner/draw: 1 point
-        // Otherwise: 0 points
+        // Gouden Doelpunt (Exact minute): +2 points
         
         const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
         const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
@@ -1664,6 +2314,11 @@ function AdminView({
           points = 3;
         } else if (actualWinner === predWinner) {
           points = 1;
+        }
+
+        // Golden Goal logic
+        if (fgm !== undefined && fgm !== null && pred.firstGoalMinute === fgm) {
+          points += 2;
         }
 
         const oldPoints = pred.pointsEarned || 0;
@@ -1691,6 +2346,49 @@ function AdminView({
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'batch-update-results');
     }
+  };
+
+  const handleResetLeaderboard = async () => {
+    setConfirmAction({
+      title: 'Klassement Resetten',
+      message: 'Weet je zeker dat je ALLE scores wilt resetten naar 0? Dit kan niet ongedaan worden gemaakt.',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setSaving(true);
+        try {
+          const batch = writeBatch(db);
+          
+          // 1. Reset all profiles
+          const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+          profilesSnapshot.docs.forEach(profileDoc => {
+            batch.update(doc(db, 'profiles', profileDoc.id), { totalPoints: 0 });
+          });
+
+          // 2. Reset all predictions
+          const predsSnapshot = await getDocs(collection(db, 'predictions'));
+          predsSnapshot.docs.forEach(predDoc => {
+            batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: 0 });
+          });
+
+          // 3. Reset all bonus answers
+          const bonusAnswersSnapshot = await getDocs(collection(db, 'bonusAnswers'));
+          bonusAnswersSnapshot.docs.forEach(answerDoc => {
+            batch.update(doc(db, 'bonusAnswers', answerDoc.id), { pointsEarned: 0 });
+          });
+
+          // 4. Reset tournament settings
+          batch.update(doc(db, 'tournamentSettings', 'results'), { topScorerAwarded: false });
+
+          await batch.commit();
+          setSuccess('Het klassement is volledig gereset!');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'reset-leaderboard');
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   const handleRecalculateAll = async () => {
@@ -1722,6 +2420,11 @@ function AdminView({
                 points = 3;
               } else if (actualWinner === predWinner) {
                 points = 1;
+              }
+
+              // Golden Goal logic
+              if (match.firstGoalMinute !== undefined && match.firstGoalMinute !== null && pred.firstGoalMinute === match.firstGoalMinute) {
+                points += 2;
               }
             }
             
@@ -1830,6 +2533,15 @@ function AdminView({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-2xl font-bold">Wedstrijdbeheer</h2>
             <div className="flex items-center gap-3">
+              <button 
+                onClick={handleResetLeaderboard}
+                disabled={saving}
+                className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl font-bold hover:bg-red-100 transition-all disabled:opacity-50"
+                title="Reset alle scores naar 0"
+              >
+                <RefreshCw size={18} />
+                Reset Klassement
+              </button>
               <button 
                 onClick={handleRecalculateAll}
                 disabled={saving}
@@ -2003,18 +2715,19 @@ function AdminView({
 
 const AdminMatchCard: React.FC<{ 
   match: Match; 
-  onUpdate: (m: Match, h: number, a: number) => void; 
+  onUpdate: (m: Match, h: number, a: number, fgm?: number) => void; 
   onDelete: (id: string) => void;
   onReset: (id: string) => void;
 }> = ({ match, onUpdate, onDelete, onReset }) => {
   const [h, setH] = useState(match.homeScore?.toString() || '');
   const [a, setA] = useState(match.awayScore?.toString() || '');
+  const [fgm, setFgm] = useState(match.firstGoalMinute?.toString() || '');
   const [updating, setUpdating] = useState(false);
 
   const handleUpdate = async () => {
     if (h === '' || a === '') return;
     setUpdating(true);
-    await onUpdate(match, parseInt(h), parseInt(a));
+    await onUpdate(match, parseInt(h), parseInt(a), fgm !== '' ? parseInt(fgm) : undefined);
     setUpdating(false);
   };
 
@@ -2044,21 +2757,34 @@ const AdminMatchCard: React.FC<{
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2">
+            <input 
+              type="number" 
+              value={h} 
+              onChange={e => setH(e.target.value)}
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+              placeholder="H"
+            />
+            <span className="text-stone-400">-</span>
+            <input 
+              type="number" 
+              value={a} 
+              onChange={e => setA(e.target.value)}
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+              placeholder="A"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          <label className="text-[8px] font-bold text-stone-400 uppercase">Gouden Doelpunt</label>
           <input 
             type="number" 
-            value={h} 
-            onChange={e => setH(e.target.value)}
-            className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
-            placeholder="H"
-          />
-          <span className="text-stone-400">-</span>
-          <input 
-            type="number" 
-            value={a} 
-            onChange={e => setA(e.target.value)}
-            className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
-            placeholder="A"
+            value={fgm} 
+            onChange={e => setFgm(e.target.value)}
+            className="w-16 h-10 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+            placeholder="Min"
           />
         </div>
         

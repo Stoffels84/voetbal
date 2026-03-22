@@ -23,7 +23,10 @@ export interface Match {
   date: string;
   homeScore?: number;
   awayScore?: number;
+  firstGoalMinute?: number;
   status: 'scheduled' | 'finished';
+  type?: 'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
+  matchNumber?: number; // For bracket positioning
 }
 
 export interface Prediction {
@@ -32,7 +35,27 @@ export interface Prediction {
   matchId: string;
   homeScore: number;
   awayScore: number;
+  firstGoalMinute?: number;
   pointsEarned?: number;
+}
+
+export interface League {
+  id: string;
+  name: string;
+  description?: string;
+  createdBy: string;
+  inviteCode: string;
+  createdAt: any;
+  memberCount: number;
+}
+
+export interface LeagueMember {
+  id: string;
+  leagueId: string;
+  userId: string;
+  joinedAt: any;
+  displayName: string;
+  totalPoints: number;
 }
 
 export interface BonusQuestion {

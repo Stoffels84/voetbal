@@ -32,6 +32,7 @@ service cloud.firestore {
     //   - date: string (required, ISO 8601)
     //   - homeScore: number (optional)
     //   - awayScore: number (optional)
+    //   - firstGoalMinute: number (optional)
     //   - status: string (required, 'scheduled' or 'finished')
     //
     // Collection: predictions
@@ -42,6 +43,7 @@ service cloud.firestore {
     //   - matchId: string (required)
     //   - homeScore: number (required)
     //   - awayScore: number (required)
+    //   - firstGoalMinute: number (optional)
     //   - pointsEarned: number (optional)
     //
     // Collection: bonusQuestions
@@ -96,7 +98,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "christoffrotty84@gmail.com" ||
+        ((request.auth.token.email == "christoffrotty84@gmail.com" && request.auth.token.email_verified == true) ||
+         (request.auth.token.email == "29076@delijn.be" && request.auth.token.email_verified == true) ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
@@ -125,31 +128,54 @@ service cloud.firestore {
     }
 
     function isValidProfile(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank']) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank', 'rankHistory', 'topScorer', 'stats']) &&
         data.uid is string && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
         (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
         data.totalPoints is number &&
         (!('favoriteTeam' in data) || data.favoriteTeam is string) &&
         (!('avatarUrl' in data) || data.avatarUrl is string) &&
-        (!('previousRank' in data) || data.previousRank is number);
+        (!('previousRank' in data) || data.previousRank is number) &&
+        (!('rankHistory' in data) || data.rankHistory is list) &&
+        (!('topScorer' in data) || data.topScorer is string) &&
+        (!('stats' in data) || data.stats is map);
     }
 
     function isValidMatch(data) {
-      return hasOnlyAllowedFields(['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'status']) &&
+      return hasOnlyAllowedFields(['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'matchNumber']) &&
         data.id is string &&
         data.homeTeam is string && data.homeTeam.size() > 0 &&
         data.awayTeam is string && data.awayTeam.size() > 0 &&
         data.date is string &&
-        data.status in ['scheduled', 'finished'];
+        data.status in ['scheduled', 'finished'] &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
+        (!('type' in data) || data.type in ['group', 'round_of_16', 'quarter_final', 'semi_final', 'final']) &&
+        (!('matchNumber' in data) || data.matchNumber is number);
+    }
+
+    function isValidLeague(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'description', 'createdBy', 'inviteCode', 'createdAt', 'memberCount']) &&
+        data.id is string && data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+        (!('description' in data) || data.description is string) &&
+        data.createdBy is string && data.createdBy == request.auth.uid &&
+        data.inviteCode is string && data.inviteCode.size() > 0 &&
+        data.createdAt is timestamp &&
+        data.memberCount is number;
+    }
+
+    function isValidLeagueMember(data) {
+      return hasOnlyAllowedFields(['id', 'leagueId', 'userId', 'joinedAt', 'displayName', 'totalPoints']) &&
+        data.id is string && data.leagueId is string && data.userId is string && data.userId == request.auth.uid &&
+        data.joinedAt is timestamp && data.displayName is string && data.totalPoints is number;
     }
 
     function isValidPrediction(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'pointsEarned']) &&
+      return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'firstGoalMinute', 'pointsEarned']) &&
         data.userId is string && data.userId == request.auth.uid &&
         data.matchId is string &&
         data.homeScore is number && data.homeScore >= 0 &&
         data.awayScore is number && data.awayScore >= 0 &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
         (!('id' in data) || data.id is string) &&
         (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number);
     }
@@ -231,15 +257,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    function isBeforeMatchDeadline(matchId) {
+      let matchDoc = get(/databases/$(database)/documents/matches/$(matchId)).data;
+      return request.time < timestamp(matchDoc.date) - duration.value(3600, 's');
+    }
+
     match /predictions/{predictionId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && (predictionId == request.resource.data.id || predictionId == request.resource.id);
+      allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && 
+                      predictionId == request.resource.data.id &&
+                      isBeforeMatchDeadline(request.resource.data.matchId);
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
                        (resource.data.userId == request.auth.uid && 
                         isValidPrediction(request.resource.data) && 
+                        isBeforeMatchDeadline(resource.data.matchId) &&
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pointsEarned', 'userId', 'matchId', 'id'])));
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isBeforeMatchDeadline(resource.data.matchId));
     }
 
     match /bonusQuestions/{questionId} {
@@ -284,6 +318,25 @@ service cloud.firestore {
     match /tournamentSettings/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin() && isValidTournamentSettings(request.resource.data);
+    }
+
+    match /leagues/{leagueId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidLeague(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (resource.data.createdBy == request.auth.uid && isValidLeague(request.resource.data)));
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+    }
+
+    match /leagueMembers/{id} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidLeagueMember(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLeagueMember(request.resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'leagueId', 'id']));
+      allow delete: if isAdmin() || 
+                      (isAuthenticated() && 
+                       (resource.data.userId == request.auth.uid || 
+                        get(/databases/$(database)/documents/leagues/$(resource.data.leagueId)).data.createdBy == request.auth.uid));
     }
 
     // Default deny
