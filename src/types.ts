@@ -53,15 +53,6 @@ export interface BonusAnswer {
   pointsEarned?: number;
 }
 
-export interface Message {
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  timestamp: any;
-  avatarUrl?: string;
-}
-
 export interface Poll {
   id: string;
   question: string;
@@ -86,4 +77,11 @@ export interface AppNotification {
   read: boolean;
   link?: string;
   createdAt: any;
+}
+
+export interface TournamentSettings {
+  id: string;
+  officialTopScorer?: string;
+  topScorerPoints?: number;
+  topScorerAwarded?: boolean;
 }

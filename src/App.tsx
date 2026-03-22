@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   onAuthStateChanged, 
   signOut, 
@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
   Calendar, 
@@ -46,12 +47,10 @@ import {
   ArrowRight,
   Info,
   ShieldCheck,
-  MessageSquare,
   HelpCircle,
   TrendingUp,
   TrendingDown,
   Minus,
-  Send,
   Timer,
   Camera,
   Bell,
@@ -72,7 +71,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Message, Poll, PollVote, AppNotification } from './types';
+import { Match, Prediction, UserProfile, UserPrivate, BonusQuestion, BonusAnswer, Poll, PollVote, AppNotification, TournamentSettings } from './types';
 import { 
   addDoc,
   serverTimestamp,
@@ -98,7 +97,7 @@ const TEAM_COLORS: Record<string, { primary: string, secondary: string, text: st
   'Kroatië': { primary: '#FF0000', secondary: '#FFFFFF', text: '#FFFFFF' },
 };
 
-const DEFAULT_THEME = { primary: '#FFD200', secondary: '#1A1A1A', text: '#1A1A1A' };
+const DEFAULT_THEME = { primary: '#10b981', secondary: '#0f172a', text: '#f8fafc' };
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<any, any> {
@@ -196,62 +195,98 @@ function HeadToHeadView({
   const targetPredictions = predictions.filter(p => p.userId === targetUser.uid);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-          <ArrowRight className="rotate-180" size={24} />
+        <button onClick={onBack} className="p-4 glass-card hover:bg-slate-50 rounded-[1.5rem] transition-all active:scale-95 shadow-lg shadow-slate-200/50">
+          <ArrowRight className="rotate-180 text-slate-900" size={20} />
         </button>
-        <h2 className="text-2xl font-bold text-delijn-black">Head-to-Head</h2>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-3xl shadow-xl border border-stone-100 text-center">
-          <img src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.displayName}`} className="w-16 h-16 mx-auto mb-3 rounded-full border-2 border-delijn-yellow" />
-          <p className="font-bold text-delijn-black">{currentUser.displayName}</p>
-          <p className="text-2xl font-black text-delijn-yellow">{currentUser.totalPoints} pts</p>
-        </div>
-        <div className="bg-white p-6 rounded-3xl shadow-xl border border-stone-100 text-center">
-          <img src={targetUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${targetUser.displayName}`} className="w-16 h-16 mx-auto mb-3 rounded-full border-2 border-stone-200" />
-          <p className="font-bold text-delijn-black">{targetUser.displayName}</p>
-          <p className="text-2xl font-black text-stone-400">{targetUser.totalPoints} pts</p>
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">Head-to-Head</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Vergelijking met {targetUser.displayName}</p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold text-stone-400 px-2">Vergelijking</h3>
-        {matches.filter(m => m.status === 'finished').map(match => {
-          const myPred = currentPredictions.find(p => p.matchId === match.id);
-          const theirPred = targetPredictions.find(p => p.matchId === match.id);
-
-          return (
-            <div key={match.id} className="bg-white p-4 rounded-2xl shadow-md border border-stone-100">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs font-bold text-stone-400 uppercase">{format(new Date(match.date), 'dd MMM HH:mm', { locale: nl })}</span>
-                <span className="text-xs font-black bg-stone-100 px-2 py-1 rounded-lg">{match.homeScore} - {match.awayScore}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 text-right">
-                  <p className="text-sm font-bold text-delijn-black truncate">{match.homeTeam}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={cn("px-2 py-1 rounded-lg text-xs font-bold", myPred?.pointsEarned ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500")}>
-                    {myPred ? `${myPred.homeScore}-${myPred.awayScore}` : '-'}
-                  </div>
-                  <span className="text-xs font-bold text-stone-300">vs</span>
-                  <div className={cn("px-2 py-1 rounded-lg text-xs font-bold", theirPred?.pointsEarned ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500")}>
-                    {theirPred ? `${theirPred.homeScore}-${theirPred.awayScore}` : '-'}
-                  </div>
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-bold text-delijn-black truncate">{match.awayTeam}</p>
-                </div>
-              </div>
+      <div className="grid grid-cols-2 gap-6">
+        <div className="glass-card p-8 rounded-[2.5rem] text-center relative overflow-hidden group border-t-4 border-theme-primary">
+          <div className="relative z-10">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-[2rem] border-4 border-white p-1 bg-white shadow-2xl group-hover:scale-110 transition-transform duration-500">
+              <img src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.displayName}`} className="w-full h-full rounded-[1.5rem] object-cover" />
             </div>
-          );
-        })}
-        {matches.filter(m => m.status === 'finished').length === 0 && (
-          <p className="text-center text-stone-400 py-8 italic">Nog geen gespeelde wedstrijden om te vergelijken.</p>
-        )}
+            <p className="font-black text-slate-900 uppercase tracking-tight mb-1 text-lg">{currentUser.displayName}</p>
+            <div className="inline-flex items-center gap-2 bg-slate-900 text-white px-4 py-1.5 rounded-full">
+              <span className="text-xl font-black font-display">{currentUser.totalPoints}</span>
+              <span className="text-[10px] uppercase font-black tracking-widest opacity-60">pts</span>
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-8 rounded-[2.5rem] text-center relative overflow-hidden group border-t-4 border-slate-200">
+          <div className="relative z-10">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-[2rem] border-4 border-white p-1 bg-white shadow-2xl group-hover:scale-110 transition-transform duration-500">
+              <img src={targetUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${targetUser.displayName}`} className="w-full h-full rounded-[1.5rem] object-cover" />
+            </div>
+            <p className="font-black text-slate-900 uppercase tracking-tight mb-1 text-lg">{targetUser.displayName}</p>
+            <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-900 px-4 py-1.5 rounded-full">
+              <span className="text-xl font-black font-display">{targetUser.totalPoints}</span>
+              <span className="text-[10px] uppercase font-black tracking-widest opacity-40">pts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between px-4">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Match Vergelijking</h3>
+          <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest">
+            <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div> Punten</span>
+            <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-200"></div> Geen</span>
+          </div>
+        </div>
+        
+        <div className="grid gap-4">
+          {matches.filter(m => m.status === 'finished').map(match => {
+            const myPred = currentPredictions.find(p => p.matchId === match.id);
+            const theirPred = targetPredictions.find(p => p.matchId === match.id);
+
+            return (
+              <div key={match.id} className="glass-card p-6 rounded-[2rem] hover:shadow-xl transition-all group">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full">
+                    <Calendar size={10} className="text-slate-400" />
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{format(new Date(match.date), 'dd MMM HH:mm', { locale: nl })}</span>
+                  </div>
+                  <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-xs font-black font-display tracking-[0.2em]">
+                    {match.homeScore} - {match.awayScore}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-6">
+                  <div className="flex-1 text-right">
+                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight truncate">{match.homeTeam}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className={cn(
+                      "w-16 h-12 rounded-2xl flex flex-col items-center justify-center transition-all shadow-sm",
+                      myPred && myPred.pointsEarned && myPred.pointsEarned > 0 ? "bg-emerald-500 text-white shadow-emerald-200" : "bg-slate-50 text-slate-400 border border-slate-100"
+                    )}>
+                      <span className="text-xs font-black font-display">{myPred ? `${myPred.homeScore}-${myPred.awayScore}` : 'N/A'}</span>
+                      <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">Jij</span>
+                    </div>
+                    <div className="w-px h-8 bg-slate-100" />
+                    <div className={cn(
+                      "w-16 h-12 rounded-2xl flex flex-col items-center justify-center transition-all shadow-sm",
+                      theirPred && theirPred.pointsEarned && theirPred.pointsEarned > 0 ? "bg-emerald-500 text-white shadow-emerald-200" : "bg-slate-50 text-slate-400 border border-slate-100"
+                    )}>
+                      <span className="text-xs font-black font-display">{theirPred ? `${theirPred.homeScore}-${theirPred.awayScore}` : 'N/A'}</span>
+                      <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">Them</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight truncate">{match.awayTeam}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -269,14 +304,21 @@ function RankChart({ history }: { history: { timestamp: any, rank: number }[] })
     <div className="h-48 w-full mt-4">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <defs>
+            <linearGradient id="colorRank" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="var(--theme-primary)" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="var(--theme-primary)" stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="name" hide />
           <YAxis reversed hide />
           <Tooltip 
-            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-            labelStyle={{ fontWeight: 'bold' }}
+            contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+            labelStyle={{ fontWeight: '900', color: '#0f172a', marginBottom: '4px' }}
+            itemStyle={{ fontWeight: 'bold', color: 'var(--theme-primary)' }}
           />
-          <Area type="monotone" dataKey="rank" stroke="#FFD200" fill="#FFD200" fillOpacity={0.1} strokeWidth={3} />
+          <Area type="monotone" dataKey="rank" stroke="var(--theme-primary)" fillOpacity={1} fill="url(#colorRank)" strokeWidth={4} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -297,14 +339,22 @@ function AppContent() {
   const [leaderboard, setLeaderboard] = useState<UserProfile[]>([]);
   const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([]);
   const [bonusAnswers, setBonusAnswers] = useState<BonusAnswer[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [pollVotes, setPollVotes] = useState<PollVote[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings | null>(null);
 
-  const theme = (previewTeam && activeTab === 'settings') 
-    ? (TEAM_COLORS[previewTeam] || DEFAULT_THEME)
-    : (profile?.favoriteTeam ? (TEAM_COLORS[profile.favoriteTeam] || DEFAULT_THEME) : DEFAULT_THEME);
+  const theme = useMemo(() => {
+    const team = (previewTeam && activeTab === 'settings') ? previewTeam : profile?.favoriteTeam;
+    return (team && TEAM_COLORS[team]) ? TEAM_COLORS[team] : DEFAULT_THEME;
+  }, [previewTeam, activeTab, profile?.favoriteTeam]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--theme-primary', theme.primary);
+    root.style.setProperty('--theme-secondary', theme.secondary);
+    root.style.setProperty('--theme-text', theme.text);
+  }, [theme]);
 
   // Auth form state
   const [isRegistering, setIsRegistering] = useState(false);
@@ -449,14 +499,6 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'bonusAnswers')
     );
 
-    const messagesUnsubscribe = onSnapshot(
-      query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(50)),
-      (snapshot) => {
-        setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message)).reverse());
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'messages')
-    );
-
     const pollsUnsubscribe = onSnapshot(
       query(collection(db, 'polls'), orderBy('createdAt', 'desc')),
       (snapshot) => {
@@ -481,6 +523,16 @@ function AppContent() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'notifications')
     );
 
+    const tournamentSettingsUnsubscribe = onSnapshot(
+      doc(db, 'tournamentSettings', 'results'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setTournamentSettings({ id: snapshot.id, ...snapshot.data() } as TournamentSettings);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, 'tournamentSettings')
+    );
+
     return () => {
       matchesUnsubscribe();
       predictionsUnsubscribe();
@@ -488,10 +540,10 @@ function AppContent() {
       profileUnsubscribe();
       bonusQuestionsUnsubscribe();
       bonusAnswersUnsubscribe();
-      messagesUnsubscribe();
       pollsUnsubscribe();
       pollVotesUnsubscribe();
       notificationsUnsubscribe();
+      tournamentSettingsUnsubscribe();
     };
   }, [user]);
 
@@ -518,10 +570,8 @@ function AppContent() {
       console.error("Auth failed", error);
       let message = "Authenticatie mislukt.";
       
-      if (error.code === 'auth/invalid-credential') {
-        message = "Onjuiste e-mail of wachtwoord.";
-      } else if (error.code === 'auth/user-not-found') {
-        message = "Er is geen account gevonden met dit e-mailadres.";
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        message = "Onjuiste e-mail of wachtwoord. Controleer je gegevens of registreer een nieuw account.";
       } else if (error.code === 'auth/too-many-requests') {
         message = "Te veel mislukte pogingen. Probeer het later opnieuw.";
       } else if (error.code === 'auth/email-already-in-use') {
@@ -565,7 +615,7 @@ function AppContent() {
           <div className="bg-delijn-yellow/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
             <Trophy className="text-delijn-black" size={32} />
           </div>
-          <h1 className="text-2xl font-bold text-delijn-black text-center mb-2">WK Pronostiek</h1>
+          <h1 className="text-2xl font-bold text-delijn-black text-center mb-2">WK Prognose 2026 De Lijn</h1>
           <p className="text-stone-500 text-center mb-8">
             {isResetting ? 'Herstel je wachtwoord.' : isRegistering ? 'Maak een account aan om mee te doen.' : 'Log in om je voorspellingen te bekijken.'}
           </p>
@@ -677,58 +727,36 @@ function AppContent() {
   }
 
   return (
-    <div 
-      className="min-h-screen bg-stone-50 text-delijn-black font-sans"
-      style={{
-        // @ts-ignore
-        '--theme-primary': theme.primary,
-        '--theme-secondary': theme.secondary,
-        '--theme-text': theme.text
-      }}
-    >
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-32">
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-4 h-20 flex items-center justify-between">
+      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-theme-primary p-2 rounded-xl">
-              <Trophy className="text-theme-text" size={24} />
+            <div className="w-10 h-10 bg-theme-primary rounded-2xl flex items-center justify-center shadow-lg shadow-theme-primary/20 rotate-3">
+              <Trophy className="text-white" size={22} />
             </div>
-            <h1 className="text-xl font-bold tracking-tight hidden sm:block">WK Pronostiek</h1>
+            <div>
+              <h1 className="text-xl font-black tracking-tighter text-slate-900 font-display uppercase">WK<span className="text-theme-primary">PROGNOSE</span> 2026</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] -mt-1">De Lijn</p>
+            </div>
           </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold">{profile?.displayName}</p>
-              <p className="text-xs text-stone-500 font-semibold">{profile?.totalPoints} punten</p>
-            </div>
-            {profile?.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-stone-100" />
-            ) : profile?.photoURL ? (
-              <img src={profile.photoURL} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-stone-100" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center">
-                <UserIcon size={20} className="text-stone-500" />
-              </div>
-            )}
+          
+          <div className="flex items-center gap-3">
             <div className="relative">
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={cn(
-                  "p-2 transition-colors relative", 
-                  showNotifications ? "text-delijn-black" : "text-stone-400 hover:text-delijn-black"
-                )}
-                title="Notificaties"
+                className="p-2.5 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all relative"
               >
                 <Bell size={20} />
-                {notifications.some(n => !n.read) && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
                 )}
               </button>
-
+              
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-3xl border border-stone-200 shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  <div className="p-4 border-b border-stone-100 bg-stone-50 flex items-center justify-between">
-                    <h3 className="font-bold text-sm">Notificaties</h3>
+                <div className="absolute right-0 mt-4 w-80 bg-white rounded-[2rem] border border-slate-200 shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-slate-900">Notificaties</h3>
                     {notifications.some(n => !n.read) && (
                       <button 
                         onClick={async () => {
@@ -737,25 +765,27 @@ function AppContent() {
                             await updateDoc(doc(db, 'notifications', n.id), { read: true });
                           }
                         }}
-                        className="text-[10px] font-black text-delijn-black uppercase hover:underline"
+                        className="text-[10px] font-black text-theme-primary uppercase hover:underline"
                       >
                         Alles gelezen
                       </button>
                     )}
                   </div>
-                  <div className="max-h-96 overflow-y-auto">
+                  <div className="max-h-96 overflow-y-auto no-scrollbar">
                     {notifications.length === 0 ? (
-                      <div className="p-8 text-center">
-                        <Bell size={32} className="mx-auto text-stone-200 mb-2" />
-                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest">Geen meldingen</p>
+                      <div className="p-10 text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Bell size={24} className="text-slate-300" />
+                        </div>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Geen meldingen</p>
                       </div>
                     ) : (
                       notifications.map(notification => (
                         <div 
                           key={notification.id} 
                           className={cn(
-                            "p-4 border-b border-stone-50 last:border-0 transition-colors cursor-pointer hover:bg-stone-50",
-                            !notification.read && "bg-delijn-yellow/5"
+                            "p-5 border-b border-slate-50 last:border-0 transition-colors cursor-pointer hover:bg-slate-50",
+                            !notification.read && "bg-theme-primary/5"
                           )}
                           onClick={async () => {
                             if (!notification.read) {
@@ -767,17 +797,14 @@ function AppContent() {
                             }
                           }}
                         >
-                          <div className="flex gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                              "bg-stone-100 text-stone-500"
-                            )}>
-                              <Info size={16} />
+                          <div className="flex gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                              <Info size={18} />
                             </div>
                             <div className="flex-1">
-                              <p className="text-sm font-bold leading-tight mb-1">{notification.title}</p>
-                              <p className="text-xs text-stone-500 leading-tight">{notification.message}</p>
-                              <p className="text-[10px] text-stone-400 mt-2 font-bold uppercase tracking-widest">
+                              <p className="text-sm font-bold text-slate-900 leading-tight mb-1">{notification.title}</p>
+                              <p className="text-xs text-slate-500 leading-relaxed">{notification.message}</p>
+                              <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">
                                 {format(new Date(notification.createdAt), 'd MMM HH:mm', { locale: nl })}
                               </p>
                             </div>
@@ -789,74 +816,25 @@ function AppContent() {
                 </div>
               )}
             </div>
-
+            
             <button 
               onClick={() => setActiveTab('settings')}
-              className={cn("p-2 transition-colors", activeTab === 'settings' ? "text-delijn-black" : "text-stone-400 hover:text-delijn-black")}
-              title="Instellingen"
+              className="p-2.5 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
             >
               <Settings size={20} />
             </button>
             <button 
               onClick={handleLogout}
-              className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+              className="p-2.5 rounded-2xl bg-red-50 text-red-500 hover:bg-red-100 transition-all"
               title="Uitloggen"
             >
               <LogOut size={20} />
             </button>
           </div>
         </div>
-
-        {/* Tabs */}
-        <nav className="max-w-4xl mx-auto px-4 flex border-t border-stone-100 overflow-x-auto no-scrollbar">
-          <TabButton 
-            active={activeTab === 'predictions'} 
-            onClick={() => setActiveTab('predictions')}
-            icon={<Calendar size={18} />}
-            label="Pronos"
-          />
-          <TabButton 
-            active={activeTab === 'leaderboard'} 
-            onClick={() => setActiveTab('leaderboard')}
-            icon={<Trophy size={18} />}
-            label="Klassement"
-          />
-          <TabButton 
-            active={activeTab === 'bonus'} 
-            onClick={() => setActiveTab('bonus')}
-            icon={<HelpCircle size={18} />}
-            label="Bonus"
-          />
-          <TabButton 
-            active={activeTab === 'chat'} 
-            onClick={() => setActiveTab('chat')}
-            icon={<MessageSquare size={18} />}
-            label="Chat"
-          />
-          <TabButton 
-            active={activeTab === 'polls'} 
-            onClick={() => setActiveTab('polls')}
-            icon={<BarChart3 size={18} />}
-            label="Polls"
-          />
-          <TabButton 
-            active={activeTab === 'rules'} 
-            onClick={() => setActiveTab('rules')}
-            icon={<Info size={18} />}
-            label="Regels"
-          />
-          {user.role === 'admin' && (
-            <TabButton 
-              active={activeTab === 'admin'} 
-              onClick={() => setActiveTab('admin')}
-              icon={<ShieldCheck size={18} />}
-              label="Beheer"
-            />
-          )}
-        </nav>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-6 py-8">
         <CountdownTimer matches={matches} />
 
         {activeTab === 'predictions' && (
@@ -884,9 +862,6 @@ function AppContent() {
         {activeTab === 'bonus' && (
           <BonusQuestionsView questions={bonusQuestions} answers={bonusAnswers} userId={user.uid} />
         )}
-        {activeTab === 'chat' && (
-          <ChatBox messages={messages} user={user} profile={profile} />
-        )}
         {activeTab === 'polls' && (
           <PollsView polls={polls} pollVotes={pollVotes} userId={user.uid} />
         )}
@@ -901,9 +876,52 @@ function AppContent() {
           />
         )}
         {activeTab === 'admin' && user.role === 'admin' && (
-          <AdminView matches={matches} bonusQuestions={bonusQuestions} polls={polls} />
+          <AdminView 
+            matches={matches} 
+            bonusQuestions={bonusQuestions} 
+            polls={polls} 
+            tournamentSettings={tournamentSettings}
+          />
         )}
       </main>
+
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-lg z-50">
+        <nav className="bg-white/80 backdrop-blur-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-[2.5rem] h-20 flex items-center justify-around px-4">
+          <TabButton 
+            active={activeTab === 'predictions'} 
+            onClick={() => setActiveTab('predictions')}
+            icon={<Calendar />}
+            label="Pronos"
+          />
+          <TabButton 
+            active={activeTab === 'leaderboard'} 
+            onClick={() => setActiveTab('leaderboard')}
+            icon={<Trophy />}
+            label="Klassement"
+          />
+          <TabButton 
+            active={activeTab === 'bonus'} 
+            onClick={() => setActiveTab('bonus')}
+            icon={<HelpCircle />}
+            label="Bonus"
+          />
+          <TabButton 
+            active={activeTab === 'polls'} 
+            onClick={() => setActiveTab('polls')}
+            icon={<BarChart3 />}
+            label="Polls"
+          />
+          {user.role === 'admin' && (
+            <TabButton 
+              active={activeTab === 'admin'} 
+              onClick={() => setActiveTab('admin')}
+              icon={<ShieldCheck />}
+              label="Admin"
+            />
+          )}
+        </nav>
+      </div>
     </div>
   );
 }
@@ -921,12 +939,25 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
     <button 
       onClick={onClick}
       className={cn(
-        "flex-1 py-4 flex items-center justify-center gap-2 text-sm font-bold transition-all border-b-2",
-        active ? "border-theme-primary text-delijn-black bg-theme-primary/10" : "border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50"
+        "flex flex-col items-center justify-center gap-1 transition-all duration-300 relative px-2",
+        active ? "text-theme-primary scale-110" : "text-slate-400 hover:text-slate-600"
       )}
     >
-      {icon}
-      <span>{label}</span>
+      <div className={cn(
+        "p-2 rounded-2xl transition-all duration-300",
+        active ? "bg-theme-primary/10 shadow-inner" : "bg-transparent"
+      )}>
+        {React.cloneElement(icon as React.ReactElement, { size: 22, strokeWidth: active ? 2.5 : 2 })}
+      </div>
+      <span className={cn("text-[10px] font-bold uppercase tracking-widest transition-opacity duration-300", active ? "opacity-100" : "opacity-0 h-0")}>
+        {label}
+      </span>
+      {active && (
+        <motion.div 
+          layoutId="activeTab"
+          className="absolute -top-1 w-1 h-1 bg-theme-primary rounded-full"
+        />
+      )}
     </button>
   );
 }
@@ -936,16 +967,32 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
   const finishedMatches = matches.filter(m => m.status === 'finished');
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <section>
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Clock className="text-delijn-black" size={24} />
-          Komende Wedstrijden
-        </h2>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 font-display uppercase tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-theme-primary/10 flex items-center justify-center">
+                <Clock className="text-theme-primary" size={22} />
+              </div>
+              Komende Wedstrijden
+            </h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 ml-13">Voorspel de scores van de volgende matchen</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="w-2 h-2 rounded-full bg-theme-primary animate-pulse"></div>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{upcomingMatches.length} Matchen</span>
+          </div>
+        </div>
         {upcomingMatches.length === 0 ? (
           <EmptyState message="Geen komende wedstrijden gevonden." />
         ) : (
-          <div className="grid gap-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1 }}
+            className="grid gap-6"
+          >
             {upcomingMatches.map(match => (
               <MatchCard 
                 key={match.id} 
@@ -955,19 +1002,31 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
                 allPredictions={predictions}
               />
             ))}
-          </div>
+          </motion.div>
         )}
       </section>
 
       <section>
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <CheckCircle2 className="text-stone-400" size={24} />
-          Gespeelde Wedstrijden
-        </h2>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 font-display uppercase tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center">
+                <CheckCircle2 className="text-slate-400" size={22} />
+              </div>
+              Gespeelde Wedstrijden
+            </h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 ml-13">Bekijk de resultaten en jouw punten</p>
+          </div>
+        </div>
         {finishedMatches.length === 0 ? (
           <EmptyState message="Nog geen wedstrijden gespeeld." />
         ) : (
-          <div className="grid gap-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1 }}
+            className="grid gap-6"
+          >
             {finishedMatches.map(match => (
               <MatchCard 
                 key={match.id} 
@@ -978,7 +1037,7 @@ function PredictionsView({ matches, predictions, userId }: { matches: Match[]; p
                 allPredictions={predictions}
               />
             ))}
-          </div>
+          </motion.div>
         )}
       </section>
     </div>
@@ -1036,113 +1095,150 @@ const MatchCard: React.FC<{
     prediction.awayScore.toString() === awayScore;
 
   return (
-    <div className={cn(
-      "bg-white p-6 rounded-2xl border border-stone-200 shadow-sm transition-all flex flex-col gap-6",
-      readonly && "opacity-80 grayscale-[0.5]"
-    )}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex-1">
-          <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">
-            {format(new Date(match.date), 'EEEE d MMMM HH:mm', { locale: nl })}
-          </p>
-          <div className="flex items-center gap-4 text-lg font-bold">
-            <span className="flex-1 text-right">{match.homeTeam}</span>
-            <div className="flex items-center gap-2 bg-stone-100 px-3 py-1 rounded-lg min-w-[60px] justify-center">
-              {match.status === 'finished' ? (
-                <span className="text-delijn-black font-black">{match.homeScore} - {match.awayScore}</span>
-              ) : (
-                <span className="text-stone-400">vs</span>
-              )}
-            </div>
-            <span className="flex-1">{match.awayTeam}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <input 
-              type="number" 
-              min="0"
-              value={homeScore}
-              onChange={(e) => setHomeScore(e.target.value)}
-              disabled={readonly || saving}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-theme-primary outline-none disabled:opacity-50"
-              placeholder="?"
-            />
-            <span className="text-stone-400 font-bold">-</span>
-            <input 
-              type="number" 
-              min="0"
-              value={awayScore}
-              onChange={(e) => setAwayScore(e.target.value)}
-              disabled={readonly || saving}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-theme-primary outline-none disabled:opacity-50"
-              placeholder="?"
-            />
-          </div>
-          
-          {!readonly && (
-            <button 
-              onClick={handleSave}
-              disabled={saving || isSaved || homeScore === '' || awayScore === ''}
-              className={cn(
-                "px-4 py-3 rounded-xl font-bold transition-all flex items-center gap-2",
-                isSaved 
-                  ? "bg-theme-primary text-theme-text cursor-default" 
-                  : "bg-delijn-black text-white hover:bg-stone-800 active:scale-95 disabled:opacity-50"
-              )}
-            >
-              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" /> : isSaved ? <CheckCircle2 size={18} /> : 'Opslaan'}
-            </button>
-          )}
-
-          {readonly && prediction && (
-            <div className="flex flex-col items-end">
-              <p className="text-xs font-bold text-stone-400 uppercase">Jouw gok</p>
-              <p className="font-bold text-stone-600">{prediction.homeScore} - {prediction.awayScore}</p>
-              {prediction.pointsEarned !== undefined && (
-                <p className="text-sm font-bold text-delijn-black">+{prediction.pointsEarned} ptn</p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {totalPredictions > 0 && (
-        <div className="pt-4 border-t border-stone-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-1">
-              <BarChart3 size={12} />
-              Community Voorspellingen ({totalPredictions})
-            </p>
-          </div>
-          <div className="flex h-2 rounded-full overflow-hidden bg-stone-100">
-            <div 
-              className="bg-delijn-black transition-all duration-500" 
-              style={{ width: `${getPercent(stats.home)}%` }}
-              title={`Winst ${match.homeTeam}: ${getPercent(stats.home)}%`}
-            />
-            <div 
-              className="bg-stone-300 transition-all duration-500" 
-              style={{ width: `${getPercent(stats.draw)}%` }}
-              title={`Gelijkspel: ${getPercent(stats.draw)}%`}
-            />
-            <div 
-              className="bg-delijn-yellow transition-all duration-500" 
-              style={{ width: `${getPercent(stats.away)}%` }}
-              title={`Winst ${match.awayTeam}: ${getPercent(stats.away)}%`}
-            />
-          </div>
-          <div className="flex justify-between mt-1 text-[10px] font-bold text-stone-500">
-            <span>{match.homeTeam} {getPercent(stats.home)}%</span>
-            <span>Gelijk {getPercent(stats.draw)}%</span>
-            <span>{match.awayTeam} {getPercent(stats.away)}%</span>
-          </div>
-        </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      className={cn(
+        "glass-card p-6 rounded-[2.5rem] transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 group",
+        readonly && "opacity-90"
       )}
-    </div>
+    >
+      <div className="flex flex-col gap-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 bg-slate-100 px-4 py-1.5 rounded-full">
+            <Calendar size={12} className="text-slate-400" />
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              {format(new Date(match.date), 'EEEE d MMMM HH:mm', { locale: nl })}
+            </span>
+          </div>
+          {match.status === 'finished' && (
+            <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em]">
+              Finished
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-4 sm:gap-12">
+          <div className="flex-1 flex flex-col items-center gap-3 text-center">
+            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500">
+              <span className="text-2xl font-black text-slate-900 font-display">{match.homeTeam.substring(0, 3).toUpperCase()}</span>
+            </div>
+            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{match.homeTeam}</p>
+          </div>
+
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-3">
+              {match.status === 'finished' ? (
+                <div className="flex items-center gap-4 text-4xl font-black font-display text-slate-900 tracking-tighter">
+                  <span>{match.homeScore}</span>
+                  <span className="text-slate-200 text-2xl">:</span>
+                  <span>{match.awayScore}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={homeScore}
+                    onChange={(e) => setHomeScore(e.target.value)}
+                    disabled={readonly || saving}
+                    className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
+                    placeholder="-"
+                  />
+                  <span className="text-slate-200 font-black text-2xl">:</span>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={awayScore}
+                    onChange={(e) => setAwayScore(e.target.value)}
+                    disabled={readonly || saving}
+                    className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
+                    placeholder="-"
+                  />
+                </div>
+              )}
+            </div>
+            
+            {!readonly && (
+              <button 
+                onClick={handleSave}
+                disabled={saving || isSaved || homeScore === '' || awayScore === ''}
+                className={cn(
+                  "w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 shadow-lg",
+                  isSaved 
+                    ? "bg-emerald-500 text-white shadow-emerald-200" 
+                    : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200 disabled:opacity-50"
+                )}
+              >
+                {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full mx-auto" /> : isSaved ? 'Opgeslagen' : 'Voorspelling Opslaan'}
+              </button>
+            )}
+          </div>
+
+          <div className="flex-1 flex flex-col items-center gap-3 text-center">
+            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500">
+              <span className="text-2xl font-black text-slate-900 font-display">{match.awayTeam.substring(0, 3).toUpperCase()}</span>
+            </div>
+            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{match.awayTeam}</p>
+          </div>
+        </div>
+
+        {readonly && prediction && (
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                <UserIcon size={14} className="text-slate-400" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Jouw gok</p>
+                <p className="text-sm font-black text-slate-900">{prediction.homeScore} - {prediction.awayScore}</p>
+              </div>
+            </div>
+            {prediction.pointsEarned !== undefined && (
+              <div className={cn(
+                "px-4 py-2 rounded-xl font-black text-sm",
+                prediction.pointsEarned > 0 ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" : "bg-slate-200 text-slate-500"
+              )}>
+                +{prediction.pointsEarned} ptn
+              </div>
+            )}
+          </div>
+        )}
+
+        {totalPredictions > 0 && (
+          <div className="pt-6 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                <BarChart3 size={14} className="text-theme-primary" />
+                Onze stelplaats ({totalPredictions})
+              </p>
+              <div className="flex gap-3 text-[9px] font-black uppercase tracking-widest">
+                <span className="text-slate-900">{getPercent(stats.home)}% Thuis</span>
+                <span className="text-slate-400">{getPercent(stats.draw)}% Gelijkspel</span>
+                <span className="text-theme-primary">{getPercent(stats.away)}% Uitploeg</span>
+              </div>
+            </div>
+            <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100 p-0.5">
+              <div 
+                className="bg-slate-900 rounded-full transition-all duration-1000 ease-out" 
+                style={{ width: `${getPercent(stats.home)}%` }}
+              />
+              <div 
+                className="bg-slate-200 rounded-full transition-all duration-1000 ease-out mx-0.5" 
+                style={{ width: `${getPercent(stats.draw)}%` }}
+              />
+              <div 
+                className="bg-theme-primary rounded-full transition-all duration-1000 ease-out" 
+                style={{ width: `${getPercent(stats.away)}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
-}
+};
 
 function PollsView({ polls, pollVotes, userId }: { polls: Poll[]; pollVotes: PollVote[]; userId: string }) {
   const handleVote = async (pollId: string, optionIndex: number) => {
@@ -1160,21 +1256,26 @@ function PollsView({ polls, pollVotes, userId }: { polls: Poll[]; pollVotes: Pol
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <h2 className="text-3xl font-bold flex items-center gap-3">
-        <BarChart3 className="text-delijn-black" size={32} />
-        Polls & Vragen
-      </h2>
+    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">Polls & Vragen</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Geef je mening en win extra badges</p>
+        </div>
+        <div className="w-14 h-14 glass-card rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200/50">
+          <BarChart3 className="text-theme-primary" size={24} />
+        </div>
+      </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-8">
         {polls.map(poll => {
           const userVote = pollVotes.find(v => v.pollId === poll.id);
           const totalVotes = poll.results?.reduce((a, b) => a + b, 0) || 0;
 
           return (
-            <div key={poll.id} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
-              <h3 className="text-xl font-bold mb-6">{poll.question}</h3>
-              <div className="space-y-3">
+            <div key={poll.id} className="glass-card p-8 rounded-[2.5rem] hover:shadow-2xl transition-all duration-500 group">
+              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8 group-hover:text-theme-primary transition-colors">{poll.question}</h3>
+              <div className="space-y-4">
                 {poll.options.map((option, idx) => {
                   const votes = poll.results?.[idx] || 0;
                   const percent = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
@@ -1186,32 +1287,35 @@ function PollsView({ polls, pollVotes, userId }: { polls: Poll[]; pollVotes: Pol
                       onClick={() => !userVote && handleVote(poll.id, idx)}
                       disabled={!!userVote}
                       className={cn(
-                        "w-full relative h-14 rounded-2xl border transition-all overflow-hidden group",
+                        "w-full relative h-16 rounded-[1.5rem] border-2 transition-all overflow-hidden group/btn",
                         isSelected 
-                          ? "border-delijn-yellow bg-delijn-yellow/5" 
+                          ? "border-theme-primary bg-theme-primary/5" 
                           : userVote 
-                            ? "border-stone-100 bg-stone-50" 
-                            : "border-stone-200 hover:border-delijn-yellow hover:bg-stone-50"
+                            ? "border-slate-50 bg-slate-50/50" 
+                            : "border-slate-100 hover:border-theme-primary hover:bg-slate-50"
                       )}
                     >
                       {userVote && (
                         <div 
                           className={cn(
-                            "absolute inset-y-0 left-0 transition-all duration-1000",
-                            isSelected ? "bg-delijn-yellow/20" : "bg-stone-200/50"
+                            "absolute inset-y-0 left-0 transition-all duration-1000 ease-out",
+                            isSelected ? "bg-theme-primary/20" : "bg-slate-200/30"
                           )}
                           style={{ width: `${percent}%` }}
                         />
                       )}
-                      <div className="absolute inset-0 px-6 flex items-center justify-between font-bold">
+                      <div className="absolute inset-0 px-6 flex items-center justify-between">
                         <span className={cn(
-                          "transition-colors",
-                          isSelected ? "text-delijn-black" : "text-stone-600"
+                          "font-black uppercase tracking-widest text-[11px] transition-colors",
+                          isSelected ? "text-slate-900" : "text-slate-500"
                         )}>
                           {option}
                         </span>
                         {userVote && (
-                          <span className="text-stone-400 text-sm">{percent}%</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-900 font-black font-display text-sm">{percent}%</span>
+                            {isSelected && <CheckCircle2 size={14} className="text-theme-primary" />}
+                          </div>
                         )}
                       </div>
                     </button>
@@ -1219,9 +1323,11 @@ function PollsView({ polls, pollVotes, userId }: { polls: Poll[]; pollVotes: Pol
                 })}
               </div>
               {userVote && (
-                <p className="mt-4 text-xs font-bold text-stone-400 text-center uppercase tracking-widest">
+                <div className="mt-8 flex items-center justify-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                  <div className="w-1 h-1 rounded-full bg-slate-300" />
                   Bedankt voor je stem!
-                </p>
+                  <div className="w-1 h-1 rounded-full bg-slate-300" />
+                </div>
               )}
             </div>
           );
@@ -1239,47 +1345,56 @@ function RulesView() {
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <section>
-        <h2 className="text-3xl font-bold mb-8 flex items-center gap-3">
-          <Trophy className="text-delijn-black" size={32} />
-          Puntentelling Pronostiek
-        </h2>
-        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="p-8">
-            <div className="space-y-8">
-              <div className="flex items-center gap-6">
-                <div className="bg-delijn-yellow text-delijn-black w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0 shadow-lg shadow-delijn-yellow/20">
+        <div className="flex items-center justify-between mb-10">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">Puntentelling</h2>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Hoe verdien je punten in de league?</p>
+          </div>
+          <div className="w-14 h-14 glass-card rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200/50">
+            <Trophy className="text-theme-primary" size={24} />
+          </div>
+        </div>
+
+        <div className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50">
+          <div className="p-10">
+            <div className="space-y-10">
+              <div className="flex items-center gap-8 group">
+                <div className="bg-theme-primary text-white w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl font-black font-display shrink-0 shadow-2xl shadow-theme-primary/20 group-hover:scale-110 transition-transform duration-500">
                   3
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-delijn-black">Correcte Uitslag</h3>
-                  <p className="text-stone-500">Je hebt de exacte score van de wedstrijd juist voorspeld.</p>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">Correcte Uitslag</h3>
+                  <p className="text-sm font-bold text-slate-400 leading-relaxed">Je hebt de exacte score van de wedstrijd juist voorspeld. De ultieme prestatie!</p>
                 </div>
               </div>
-              <div className="h-px bg-stone-100" />
-              <div className="flex items-center gap-6">
-                <div className="bg-stone-100 text-delijn-black w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">
+              <div className="h-px bg-slate-100" />
+              <div className="flex items-center gap-8 group">
+                <div className="bg-slate-900 text-white w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl font-black font-display shrink-0 shadow-2xl shadow-slate-200 group-hover:scale-110 transition-transform duration-500">
                   1
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-delijn-black">Correcte Winnaar / Gelijkspel</h3>
-                  <p className="text-stone-500">Je hebt de winnaar of een gelijkspel juist voorspeld, maar niet de exacte score.</p>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">Correcte Winnaar</h3>
+                  <p className="text-sm font-bold text-slate-400 leading-relaxed">Je hebt de winnaar of een gelijkspel juist voorspeld, maar niet de exacte score.</p>
                 </div>
               </div>
-              <div className="h-px bg-stone-100" />
-              <div className="flex items-center gap-6">
-                <div className="bg-stone-50 text-stone-400 w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">
+              <div className="h-px bg-slate-100" />
+              <div className="flex items-center gap-8 group">
+                <div className="bg-slate-100 text-slate-400 w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl font-black font-display shrink-0 group-hover:scale-110 transition-transform duration-500">
                   0
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-delijn-black">Foutieve Voorspelling</h3>
-                  <p className="text-stone-500">Je hebt noch de winnaar, noch de score juist voorspeld.</p>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">Foutieve Gok</h3>
+                  <p className="text-sm font-bold text-slate-400 leading-relaxed">Je hebt noch de winnaar, noch de score juist voorspeld. Volgende keer beter!</p>
                 </div>
               </div>
             </div>
           </div>
-          <div className="bg-stone-50 p-6 border-t border-stone-100">
-            <p className="text-sm text-stone-500 italic">
-              * Punten worden automatisch berekend zodra de admin de officiële uitslag invoert.
+          <div className="bg-slate-900 p-8 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+              <Info className="text-white" size={18} />
+            </div>
+            <p className="text-[11px] font-black text-white/60 uppercase tracking-widest leading-relaxed">
+              Punten worden automatisch berekend zodra de admin de officiële uitslag invoert.
             </p>
           </div>
         </div>
@@ -1298,86 +1413,123 @@ function LeaderboardView({
   onCompare: (userId: string) => void;
 }) {
   return (
-    <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-        <h2 className="text-xl font-bold">Top Voorspellers</h2>
-        <div className="flex items-center gap-2 text-xs text-stone-400 font-bold uppercase tracking-widest">
-          <TrendingUp size={14} className="text-green-500" />
-          <span>Vorm</span>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50"
+    >
+      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 font-display uppercase tracking-tight">Klassement</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Wie domineert de WK Prognose 2026?</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+          <TrendingUp size={14} className="text-emerald-500" />
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live</span>
         </div>
       </div>
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-slate-50">
         {leaderboard.length === 0 ? (
-          <div className="p-10 text-center text-stone-400">Nog geen scores beschikbaar.</div>
+          <EmptyState message="Nog geen scores beschikbaar." />
         ) : (
           leaderboard.map((entry, index) => {
             const rank = index + 1;
             const prevRank = entry.previousRank;
-            let rankIcon = <Minus size={14} className="text-stone-300" />;
+            let rankIcon = <Minus size={14} className="text-slate-300" />;
             
             if (prevRank) {
-              if (rank < prevRank) rankIcon = <TrendingUp size={14} className="text-green-500" />;
+              if (rank < prevRank) rankIcon = <TrendingUp size={14} className="text-emerald-500" />;
               else if (rank > prevRank) rankIcon = <TrendingDown size={14} className="text-red-500" />;
             }
 
+            const isTop3 = rank <= 3;
+            const rankColor = rank === 1 ? 'bg-yellow-400' : rank === 2 ? 'bg-slate-300' : rank === 3 ? 'bg-amber-600' : 'bg-slate-100';
+
             return (
-              <div 
+              <motion.div 
                 key={entry.uid} 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
                 className={cn(
-                  "group flex items-center gap-4 p-4 transition-colors",
-                  entry.uid === currentUserId ? "bg-theme-primary/10" : "hover:bg-stone-50"
+                  "group flex items-center gap-5 p-6 transition-all duration-500 relative",
+                  entry.uid === currentUserId ? "bg-theme-primary/[0.03]" : "hover:bg-slate-50/80"
                 )}
               >
-                <div className="w-8 flex flex-col items-center">
-                  <span className="font-bold text-stone-400">{rank}</span>
+                <div className="w-12 flex flex-col items-center justify-center shrink-0">
+                  <div className={cn(
+                    "w-10 h-10 rounded-2xl flex items-center justify-center font-black font-display text-lg shadow-lg mb-1 transition-transform group-hover:scale-110",
+                    isTop3 ? `${rankColor} text-white shadow-slate-200` : "bg-slate-100 text-slate-400"
+                  )}>
+                    {rank}
+                  </div>
                   {rankIcon}
                 </div>
-                {entry.avatarUrl ? (
-                  <img src={entry.avatarUrl} alt="" className="w-10 h-10 rounded-full border border-stone-100" />
-                ) : entry.photoURL ? (
-                  <img src={entry.photoURL} alt="" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center">
-                    <UserIcon size={18} className="text-stone-500" />
+                
+                <div className="relative shrink-0">
+                  <div className="w-16 h-16 rounded-[1.5rem] border-4 border-white bg-white shadow-xl overflow-hidden group-hover:scale-110 transition-transform duration-500">
+                    <img src={entry.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.displayName}`} alt="" className="w-full h-full object-cover" />
                   </div>
-                )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-delijn-black">{entry.displayName}</p>
+                  {isTop3 && (
+                    <div className="absolute -top-2 -right-2 w-7 h-7 bg-white rounded-full shadow-xl flex items-center justify-center border border-slate-50 animate-bounce">
+                      <Trophy size={14} className={cn(rank === 1 ? "text-yellow-400" : rank === 2 ? "text-slate-400" : "text-amber-600")} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-black text-slate-900 uppercase tracking-tight truncate text-base">{entry.displayName}</p>
                     {entry.favoriteTeam && (
-                      <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">
+                      <span className="text-[8px] bg-slate-900 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
                         {entry.favoriteTeam}
                       </span>
                     )}
                   </div>
-                  {entry.uid === currentUserId && <span className="text-[10px] bg-theme-secondary text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Jij</span>}
+                  <div className="flex items-center gap-3">
+                    {entry.uid === currentUserId && (
+                      <span className="text-[9px] bg-theme-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg shadow-theme-primary/20">Jij</span>
+                    )}
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] truncate">Level {Math.floor(entry.totalPoints / 10) + 1} Pro</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
+
+                <div className="text-right shrink-0 flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-2xl font-black font-display text-slate-900">{entry.totalPoints}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">pts</span>
+                  </div>
                   {entry.uid !== currentUserId && (
                     <button 
                       onClick={() => onCompare(entry.uid)}
-                      className="p-2 rounded-xl bg-stone-100 text-stone-400 hover:bg-theme-primary hover:text-theme-text transition-all sm:opacity-0 sm:group-hover:opacity-100 opacity-100"
-                      title="Vergelijk met mij"
+                      className="p-2.5 glass-card hover:bg-slate-900 hover:text-white transition-all rounded-xl shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-100 active:scale-90"
+                      title="Vergelijk met jou"
                     >
                       <Smartphone size={16} />
                     </button>
                   )}
-                  <div className="text-right min-w-[60px]">
-                    <p className="text-lg font-black text-delijn-black">{entry.totalPoints}</p>
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Punten</p>
-                  </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-function AdminView({ matches, bonusQuestions, polls }: { matches: Match[]; bonusQuestions: BonusQuestion[]; polls: Poll[] }) {
-  const [adminTab, setAdminTab] = useState<'matches' | 'bonus' | 'polls'>('matches');
+function AdminView({ 
+  matches, 
+  bonusQuestions, 
+  polls,
+  tournamentSettings 
+}: { 
+  matches: Match[]; 
+  bonusQuestions: BonusQuestion[]; 
+  polls: Poll[];
+  tournamentSettings: TournamentSettings | null;
+}) {
+  const [adminTab, setAdminTab] = useState<'matches' | 'bonus' | 'polls' | 'tournament'>('matches');
   const [isAdding, setIsAdding] = useState(false);
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
@@ -1389,6 +1541,69 @@ function AdminView({ matches, bonusQuestions, polls }: { matches: Match[]; bonus
     message: string;
     onConfirm: () => void;
   } | null>(null);
+
+  // Tournament settings state
+  const [officialTopScorer, setOfficialTopScorer] = useState(tournamentSettings?.officialTopScorer || '');
+  const [topScorerPoints, setTopScorerPoints] = useState(tournamentSettings?.topScorerPoints || 10);
+
+  useEffect(() => {
+    if (tournamentSettings) {
+      setOfficialTopScorer(tournamentSettings.officialTopScorer || '');
+      setTopScorerPoints(tournamentSettings.topScorerPoints || 10);
+    }
+  }, [tournamentSettings]);
+
+  const handleSaveTournamentSettings = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'tournamentSettings', 'results'), {
+        officialTopScorer,
+        topScorerPoints: Number(topScorerPoints),
+        topScorerAwarded: tournamentSettings?.topScorerAwarded || false
+      }, { merge: true });
+      setSuccess('Toernooi instellingen opgeslagen!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'tournamentSettings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAwardTopScorerPoints = async () => {
+    if (!officialTopScorer) return;
+    
+    setConfirmAction({
+      title: 'Topscorer punten toekennen',
+      message: `Weet je zeker dat je ${topScorerPoints} punten wilt toekennen aan iedereen die "${officialTopScorer}" als topscorer heeft?`,
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setSaving(true);
+        try {
+          const batch = writeBatch(db);
+          const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+          
+          profilesSnapshot.docs.forEach(profileDoc => {
+            const profile = profileDoc.data() as UserProfile;
+            if (profile.topScorer?.toLowerCase().trim() === officialTopScorer.toLowerCase().trim()) {
+              batch.update(doc(db, 'profiles', profileDoc.id), {
+                totalPoints: (profile.totalPoints || 0) + Number(topScorerPoints)
+              });
+            }
+          });
+
+          batch.update(doc(db, 'tournamentSettings', 'results'), { topScorerAwarded: true });
+          await batch.commit();
+          setSuccess('Topscorer punten succesvol toegekend!');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'award-topscorer-points');
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
+  };
 
   const handleAddMatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1598,6 +1813,16 @@ function AdminView({ matches, bonusQuestions, polls }: { matches: Match[]; bonus
           <BarChart3 size={18} />
           Polls
         </button>
+        <button 
+          onClick={() => setAdminTab('tournament')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+            adminTab === 'tournament' ? "bg-delijn-black text-white" : "bg-white text-stone-500 border border-stone-200"
+          )}
+        >
+          <Trophy size={18} />
+          Toernooi
+        </button>
       </div>
 
       {adminTab === 'matches' ? (
@@ -1701,8 +1926,76 @@ function AdminView({ matches, bonusQuestions, polls }: { matches: Match[]; bonus
         </>
       ) : adminTab === 'bonus' ? (
         <AdminBonusQuestionsView questions={bonusQuestions} />
-      ) : (
+      ) : adminTab === 'polls' ? (
         <AdminPollsView polls={polls} />
+      ) : (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+            <h2 className="text-2xl font-bold mb-6">Toernooi Resultaten</h2>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+              <div>
+                <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Officiële Topscorer</label>
+                <input 
+                  value={officialTopScorer}
+                  onChange={e => setOfficialTopScorer(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                  placeholder="Bijv. Kylian Mbappé"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Punten voor Topscorer</label>
+                <input 
+                  type="number"
+                  value={topScorerPoints}
+                  onChange={e => setTopScorerPoints(Number(e.target.value))}
+                  className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button 
+                onClick={handleSaveTournamentSettings}
+                disabled={saving}
+                className="flex-1 bg-delijn-black text-white py-3 rounded-xl font-bold hover:bg-stone-800 transition-all disabled:opacity-50"
+              >
+                {saving ? 'Opslaan...' : 'Instellingen Opslaan'}
+              </button>
+              <button 
+                onClick={handleAwardTopScorerPoints}
+                disabled={saving || !officialTopScorer || tournamentSettings?.topScorerAwarded}
+                className={cn(
+                  "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+                  tournamentSettings?.topScorerAwarded 
+                    ? "bg-green-100 text-green-600 cursor-not-allowed" 
+                    : "bg-delijn-yellow text-delijn-black hover:bg-yellow-500 disabled:opacity-50"
+                )}
+              >
+                <CheckCircle2 size={18} />
+                {tournamentSettings?.topScorerAwarded ? 'Punten Toegekend' : 'Punten Toekennen'}
+              </button>
+            </div>
+            
+            {tournamentSettings?.topScorerAwarded && (
+              <p className="mt-4 text-sm text-stone-500 italic text-center">
+                Let op: Punten zijn al een keer toegekend. Wees voorzichtig met opnieuw toekennen.
+              </p>
+            )}
+          </div>
+
+          <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed">
+            <h3 className="font-bold mb-2 flex items-center gap-2">
+              <Info size={18} className="text-stone-400" />
+              Hoe werkt dit?
+            </h3>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              Vul de naam van de officiële topscorer in en bepaal hoeveel punten gebruikers krijgen die dit correct hebben voorspeld. 
+              De vergelijking is niet hoofdlettergevoelig en negeert spaties aan het begin/eind. 
+              Wanneer je op "Punten Toekennen" klikt, worden de punten direct bij het totaal van de betreffende gebruikers opgeteld.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1726,7 +2019,12 @@ const AdminMatchCard: React.FC<{
   };
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <motion.div 
+      initial={{ opacity: 0, x: -20 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
+    >
       <div className="flex-1">
         <p className="text-xs font-bold text-stone-400 mb-1">{format(new Date(match.date), 'd MMM yyyy HH:mm')}</p>
         <p className="font-bold text-lg">{match.homeTeam} vs {match.awayTeam}</p>
@@ -1779,15 +2077,22 @@ const AdminMatchCard: React.FC<{
           <Trash2 size={20} />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="bg-white p-12 rounded-3xl border border-dashed border-stone-300 text-center">
-      <p className="text-stone-400 font-medium">{message}</p>
-    </div>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="glass-card p-16 rounded-[3rem] border-2 border-dashed border-slate-200 text-center bg-slate-50/30"
+    >
+      <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-slate-200/50 group-hover:scale-110 transition-transform duration-500">
+        <Info size={40} className="text-slate-200" />
+      </div>
+      <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-[10px] leading-relaxed max-w-[200px] mx-auto">{message}</p>
+    </motion.div>
   );
 }
 
@@ -1825,105 +2130,26 @@ function CountdownTimer({ matches }: { matches: Match[] }) {
   if (!timeLeft || !nextMatch) return null;
 
   return (
-    <div className="bg-theme-secondary text-white p-4 rounded-3xl mb-8 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-500">
-      <div className="flex items-center gap-3">
-        <div className="bg-theme-primary/20 p-2 rounded-xl">
-          <Timer className="text-theme-primary" size={20} />
+    <div className="glass-card p-6 rounded-[2.5rem] mb-10 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl shadow-slate-200/50 border-2 border-slate-50 animate-in fade-in slide-in-from-top-4 duration-700">
+      <div className="flex items-center gap-5">
+        <div className="w-16 h-16 bg-slate-900 rounded-[1.5rem] flex items-center justify-center shadow-xl shadow-slate-200">
+          <Timer className="text-theme-primary animate-pulse" size={28} />
         </div>
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Volgende wedstrijd</p>
-          <p className="font-bold text-sm">{nextMatch.homeTeam} vs {nextMatch.awayTeam}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Next Match</p>
+          <p className="font-black text-lg text-slate-900 uppercase tracking-tight">{nextMatch.homeTeam} <span className="text-slate-200 mx-1">vs</span> {nextMatch.awayTeam}</p>
         </div>
       </div>
-      <div className="text-right">
-        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Aftellen</p>
-        <p className="font-mono font-bold text-theme-primary">{timeLeft}</p>
+      <div className="flex flex-col items-center sm:items-end">
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Kickoff In</p>
+        <div className="bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100">
+          <p className="font-display font-black text-2xl text-slate-900 tracking-tighter">{timeLeft}</p>
+        </div>
       </div>
     </div>
   );
 }
 
-function ChatBox({ messages, user, profile }: { messages: Message[]; user: UserPrivate; profile: UserProfile | null }) {
-  const [newMessage, setNewMessage] = useState('');
-  const [sending, setSending] = useState(false);
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || sending) return;
-
-    setSending(true);
-    try {
-      await addDoc(collection(db, 'messages'), {
-        userId: user.uid,
-        userName: profile?.displayName || 'Anoniem',
-        text: newMessage.trim(),
-        timestamp: serverTimestamp(),
-        avatarUrl: profile?.avatarUrl || null
-      });
-      setNewMessage('');
-    } catch (error) {
-      console.error("Error sending message:", error);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
-      <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <MessageSquare className="text-delijn-black" size={24} />
-          Berichtenmuur
-        </h2>
-      </div>
-      
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-stone-400 italic">
-            Nog geen berichten. Wees de eerste!
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className={cn("flex flex-col", msg.userId === user.uid ? "items-end" : "items-start")}>
-              <div className={cn("max-w-[80%] rounded-2xl p-3 shadow-sm", 
-                msg.userId === user.uid ? "bg-delijn-black text-white rounded-tr-none" : "bg-stone-100 text-delijn-black rounded-tl-none")}>
-                <div className="flex items-center gap-2 mb-1">
-                  {msg.avatarUrl && <img src={msg.avatarUrl} alt="" className="w-4 h-4 rounded-full" />}
-                  <span className="text-[10px] font-black uppercase tracking-wider opacity-70">{msg.userName}</span>
-                </div>
-                <p className="text-sm">{msg.text}</p>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <form onSubmit={handleSendMessage} className="p-4 border-t border-stone-100 bg-stone-50 flex gap-2">
-        <input 
-          type="text"
-          value={newMessage}
-          onChange={e => setNewMessage(e.target.value)}
-          placeholder="Typ een bericht..."
-          className="flex-1 bg-white border border-stone-200 px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
-        />
-        <button 
-          type="submit"
-          disabled={!newMessage.trim() || sending}
-          className="bg-delijn-black text-white p-2 rounded-xl hover:bg-stone-800 disabled:opacity-50 transition-all"
-        >
-          <Send size={20} />
-        </button>
-      </form>
-    </div>
-  );
-}
 
 function BonusQuestionsView({ questions, answers, userId }: { questions: BonusQuestion[]; answers: BonusAnswer[]; userId: string }) {
   const handleAnswer = async (questionId: string, answer: string) => {

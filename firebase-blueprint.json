@@ -147,6 +147,16 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "TournamentSettings": {
+      "title": "TournamentSettings",
+      "description": "Global tournament settings and results",
+      "type": "object",
+      "properties": {
+        "officialTopScorer": { "type": "string", "description": "The official top scorer of the tournament" },
+        "topScorerPoints": { "type": "number", "description": "Points awarded for correctly predicting the top scorer" },
+        "topScorerAwarded": { "type": "boolean", "description": "Whether top scorer points have already been awarded" }
+      }
     }
   },
   "firestore": {
@@ -159,6 +169,7 @@
     "/messages/{messageId}": { "schema": "Message", "description": "Collection of chat messages" },
     "/polls/{pollId}": { "schema": "Poll", "description": "Collection of quick polls" },
     "/pollVotes/{id}": { "schema": "PollVote", "description": "Collection of poll votes" },
-    "/notifications/{notificationId}": { "schema": "Notification", "description": "Collection of user notifications" }
+    "/notifications/{notificationId}": { "schema": "Notification", "description": "Collection of user notifications" },
+    "/tournamentSettings/{id}": { "schema": "TournamentSettings", "description": "Collection for global tournament settings" }
   }
 }

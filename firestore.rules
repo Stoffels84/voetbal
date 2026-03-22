@@ -74,6 +74,13 @@ service cloud.firestore {
     //   - timestamp: timestamp (required)
     //   - avatarUrl: string (optional)
     //
+    // Collection: tournamentSettings
+    // Document ID: 'results'
+    // Fields:
+    //   - officialTopScorer: string (optional)
+    //   - topScorerPoints: number (optional)
+    //   - topScorerAwarded: boolean (optional)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -192,6 +199,13 @@ service cloud.firestore {
         data.read is bool && data.createdAt is timestamp;
     }
 
+    function isValidTournamentSettings(data) {
+      return hasOnlyAllowedFields(['officialTopScorer', 'topScorerPoints', 'topScorerAwarded']) &&
+        (!('officialTopScorer' in data) || data.officialTopScorer is string) &&
+        (!('topScorerPoints' in data) || data.topScorerPoints is number) &&
+        (!('topScorerAwarded' in data) || data.topScorerAwarded is bool);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -265,6 +279,11 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /tournamentSettings/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidTournamentSettings(request.resource.data);
     }
 
     // Default deny
