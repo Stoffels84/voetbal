@@ -1177,7 +1177,7 @@ function AppContent() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-32">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="w-full px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-theme-primary rounded-2xl flex items-center justify-center shadow-lg shadow-theme-primary/20 rotate-3">
               <Trophy className="text-white" size={22} />
@@ -1281,7 +1281,7 @@ function AppContent() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
+      <main className="w-full px-6 py-8">
         <CountdownTimer matches={matches} />
 
         {activeTab === 'predictions' && (
@@ -3070,7 +3070,7 @@ function SettingsView({
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <section className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
         <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
           <Settings className="text-delijn-black" size={28} />
