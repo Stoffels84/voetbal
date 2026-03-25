@@ -819,7 +819,7 @@ function AppContent() {
             userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              role: (firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be') ? 'admin' : 'user'
+              role: (firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be' || firebaseUser.email === 'christoff.rotty@icloud.com') ? 'admin' : 'user'
             };
             try {
               await setDoc(userDocRef, userData);
@@ -829,7 +829,7 @@ function AppContent() {
           } else if (userDoc) {
             userData = userDoc.data() as UserPrivate;
             // Force admin role if email matches but role is not admin
-            if ((firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be') && userData.role !== 'admin') {
+            if ((firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be' || firebaseUser.email === 'christoff.rotty@icloud.com') && userData.role !== 'admin') {
               userData.role = 'admin';
               try {
                 await updateDoc(userDocRef, { role: 'admin' });
