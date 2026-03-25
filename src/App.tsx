@@ -1546,6 +1546,15 @@ const MatchCard: React.FC<{
   const [firstGoalMinute, setFirstGoalMinute] = useState(prediction?.firstGoalMinute?.toString() || '');
   const [saving, setSaving] = useState(false);
 
+  // Sync state with props when prediction loads or changes
+  useEffect(() => {
+    if (prediction && !saving) {
+      setHomeScore(prediction.homeScore?.toString() || '');
+      setAwayScore(prediction.awayScore?.toString() || '');
+      setFirstGoalMinute(prediction.firstGoalMinute?.toString() || '');
+    }
+  }, [prediction, saving]);
+
   const isLocked = !isAdmin && (new Date(match.date).getTime() - 3600000 < Date.now());
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
@@ -1572,10 +1581,18 @@ const MatchCard: React.FC<{
       };
 
       if (prediction) {
-        await updateDoc(doc(db, 'predictions', prediction.id), predData);
+        // Only update the scores and minute to avoid triggering security rule restrictions on immutable fields
+        await updateDoc(doc(db, 'predictions', prediction.id), {
+          homeScore: parseInt(homeScore),
+          awayScore: parseInt(awayScore),
+          firstGoalMinute: firstGoalMinute !== '' ? parseInt(firstGoalMinute) : null,
+        });
       } else {
         const newPredRef = doc(collection(db, 'predictions'));
-        await setDoc(newPredRef, { id: newPredRef.id, ...predData });
+        await setDoc(newPredRef, { 
+          id: newPredRef.id, 
+          ...predData 
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'predictions');
