@@ -1673,7 +1673,7 @@ const MatchCard: React.FC<{
             </div>
 
             <div className="flex flex-col items-center gap-2 mt-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Gouden Doelpunt (Minuut)</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Eerste Doelpunt (Minuut)</p>
               {match.status === 'finished' ? (
                 <div className="flex flex-col items-center">
                   <div className="bg-slate-900 text-white w-12 h-12 rounded-xl flex items-center justify-center font-black font-display">
@@ -2322,7 +2322,7 @@ function AdminView({
         // Logic: 
         // Correct score: 3 points
         // Correct winner/draw: 1 point
-        // Gouden Doelpunt (Exact minute): +2 points
+        // Eerste Doelpunt (Exact minute): +2 points
         
         const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
         const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
@@ -2795,7 +2795,7 @@ const AdminMatchCard: React.FC<{
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <label className="text-[8px] font-bold text-stone-400 uppercase">Gouden Doelpunt</label>
+          <label className="text-[8px] font-bold text-stone-400 uppercase">Eerste Doelpunt</label>
           <input 
             type="number" 
             value={fgm} 
