@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signOut, 
@@ -773,6 +773,11 @@ function AppContent() {
   const [memberships, setMemberships] = useState<LeagueMember[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
 
+  const myPredictions = useMemo(() => {
+    if (!user) return [];
+    return predictions.filter(p => p.userId === user.uid);
+  }, [predictions, user?.uid]);
+
   const theme = useMemo(() => {
     const team = (previewTeam && activeTab === 'settings') ? previewTeam : profile?.favoriteTeam;
     return (team && TEAM_COLORS[team]) ? TEAM_COLORS[team] : DEFAULT_THEME;
@@ -814,7 +819,7 @@ function AppContent() {
             userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              role: firebaseUser.email === 'christoffrotty84@gmail.com' ? 'admin' : 'user'
+              role: (firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be') ? 'admin' : 'user'
             };
             try {
               await setDoc(userDocRef, userData);
@@ -824,7 +829,7 @@ function AppContent() {
           } else if (userDoc) {
             userData = userDoc.data() as UserPrivate;
             // Force admin role if email matches but role is not admin
-            if (firebaseUser.email === 'christoffrotty84@gmail.com' && userData.role !== 'admin') {
+            if ((firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be') && userData.role !== 'admin') {
               userData.role = 'admin';
               try {
                 await updateDoc(userDocRef, { role: 'admin' });
@@ -1287,7 +1292,7 @@ function AppContent() {
         {activeTab === 'predictions' && (
           <PredictionsView 
             matches={matches} 
-            predictions={predictions} 
+            predictions={myPredictions} 
             userId={user.uid} 
             isAdmin={user.role === 'admin'} 
           />
@@ -1545,15 +1550,40 @@ const MatchCard: React.FC<{
   const [awayScore, setAwayScore] = useState(prediction?.awayScore?.toString() || '');
   const [firstGoalMinute, setFirstGoalMinute] = useState(prediction?.firstGoalMinute?.toString() || '');
   const [saving, setSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Track the values that were actually saved to Firestore
+  const lastSavedValues = useRef({
+    home: prediction?.homeScore?.toString() || '',
+    away: prediction?.awayScore?.toString() || '',
+    minute: prediction?.firstGoalMinute?.toString() || ''
+  });
 
   // Sync state with props when prediction loads or changes
   useEffect(() => {
     if (prediction && !saving) {
-      setHomeScore(prediction.homeScore?.toString() || '');
-      setAwayScore(prediction.awayScore?.toString() || '');
-      setFirstGoalMinute(prediction.firstGoalMinute?.toString() || '');
+      const propHome = prediction.homeScore?.toString() || '';
+      const propAway = prediction.awayScore?.toString() || '';
+      const propMinute = prediction.firstGoalMinute?.toString() || '';
+      
+      // Update our reference of what's in the DB
+      lastSavedValues.current = { home: propHome, away: propAway, minute: propMinute };
+
+      // Only sync if the user hasn't made local changes that differ from what's in the DB
+      // OR if we're not in the middle of a success state
+      if (!showSuccess) {
+        setHomeScore(propHome);
+        setAwayScore(propAway);
+        setFirstGoalMinute(propMinute);
+      }
+    } else if (!prediction && !saving && !showSuccess) {
+      // If prediction is removed (e.g. by admin), clear local state
+      setHomeScore('');
+      setAwayScore('');
+      setFirstGoalMinute('');
+      lastSavedValues.current = { home: '', away: '', minute: '' };
     }
-  }, [prediction, saving]);
+  }, [prediction, saving, showSuccess]);
 
   const isLocked = !isAdmin && (new Date(match.date).getTime() - 3600000 < Date.now());
 
@@ -1569,7 +1599,12 @@ const MatchCard: React.FC<{
   const getPercent = (count: number) => totalPredictions > 0 ? Math.round((count / totalPredictions) * 100) : 0;
 
   const handleSave = async () => {
+    if (!userId) {
+      console.error('Cannot save prediction: No userId found');
+      return;
+    }
     if (homeScore === '' || awayScore === '') return;
+    
     setSaving(true);
     try {
       const predData = {
@@ -1581,11 +1616,10 @@ const MatchCard: React.FC<{
       };
 
       if (prediction) {
-        // Only update the scores and minute to avoid triggering security rule restrictions on immutable fields
         await updateDoc(doc(db, 'predictions', prediction.id), {
-          homeScore: parseInt(homeScore),
-          awayScore: parseInt(awayScore),
-          firstGoalMinute: firstGoalMinute !== '' ? parseInt(firstGoalMinute) : null,
+          homeScore: predData.homeScore,
+          awayScore: predData.awayScore,
+          firstGoalMinute: predData.firstGoalMinute,
         });
       } else {
         const newPredRef = doc(collection(db, 'predictions'));
@@ -1594,6 +1628,11 @@ const MatchCard: React.FC<{
           ...predData 
         });
       }
+      
+      // Update last saved values immediately for optimistic feel
+      lastSavedValues.current = { home: homeScore, away: awayScore, minute: firstGoalMinute };
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'predictions');
     } finally {
@@ -1701,15 +1740,15 @@ const MatchCard: React.FC<{
               <div className="w-full space-y-2">
                 <button 
                   onClick={handleSave}
-                  disabled={saving || isSaved || homeScore === '' || awayScore === '' || isLocked}
+                  disabled={saving || (isSaved && !showSuccess) || homeScore === '' || awayScore === '' || isLocked}
                   className={cn(
                     "w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 shadow-lg",
-                    isSaved 
+                    (isSaved || showSuccess)
                       ? "bg-emerald-500 text-white shadow-emerald-200" 
                       : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200 disabled:opacity-50"
                   )}
                 >
-                  {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full mx-auto" /> : isSaved ? 'Opgeslagen' : 'Voorspelling Opslaan'}
+                  {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full mx-auto" /> : (isSaved || showSuccess) ? 'Opgeslagen' : 'Voorspelling Opslaan'}
                 </button>
                 {isLocked && (
                   <div className="flex items-center justify-center gap-2 text-red-500">

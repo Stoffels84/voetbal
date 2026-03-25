@@ -98,8 +98,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((request.auth.token.email == "christoffrotty84@gmail.com" && request.auth.token.email_verified == true) ||
-         (request.auth.token.email == "29076@delijn.be" && request.auth.token.email_verified == true) ||
+        ((request.auth.token.email == "christoffrotty84@gmail.com") ||
+         (request.auth.token.email == "29076@delijn.be") ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
@@ -171,7 +171,7 @@ service cloud.firestore {
 
     function isValidPrediction(data) {
       return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'firstGoalMinute', 'pointsEarned']) &&
-        data.userId is string && data.userId == request.auth.uid &&
+        data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
         data.matchId is string &&
         data.homeScore is number && data.homeScore >= 0 &&
         data.awayScore is number && data.awayScore >= 0 &&
@@ -266,7 +266,7 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && 
                       predictionId == request.resource.data.id &&
-                      isBeforeMatchDeadline(request.resource.data.matchId);
+                      (isBeforeMatchDeadline(request.resource.data.matchId) || isAdmin());
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
                        (resource.data.userId == request.auth.uid && 
