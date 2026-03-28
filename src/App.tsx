@@ -2633,6 +2633,32 @@ function AdminView({
 
           console.log(`Deleting ${uniqueRefs.length} documents for user ${userId}`);
 
+          // Delete from Firebase Authentication via our backend API
+          const idToken = await auth.currentUser?.getIdToken();
+          if (idToken) {
+            try {
+              const response = await fetch('/api/admin/delete-user', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({ userId })
+              });
+              
+              if (!response.ok) {
+                const errorData = await response.json();
+                console.warn("Auth deletion failed or was already handled:", errorData);
+                // We continue with Firestore deletion even if Auth deletion fails 
+                // (e.g. if user was already deleted from Auth manually)
+              } else {
+                console.log("User deleted from Firebase Authentication successfully");
+              }
+            } catch (authErr) {
+              console.error("Error calling delete-user API:", authErr);
+            }
+          }
+
           // Delete in batches of 500
           let deletedCount = 0;
           for (let i = 0; i < uniqueRefs.length; i += 500) {
