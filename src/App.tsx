@@ -24,7 +24,8 @@ import {
   where,
   getDocs,
   writeBatch,
-  limit
+  limit,
+  DocumentReference
 } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -2245,6 +2246,7 @@ function AdminView({
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     message: string;
@@ -2514,16 +2516,22 @@ function AdminView({
       message: 'Match terugzetten naar gepland? Scores worden niet automatisch verwijderd uit klassement.',
       onConfirm: async () => {
         setConfirmAction(null);
+        setSaving(true);
+        setError('');
         try {
           await updateDoc(doc(db, 'matches', matchId), {
             status: 'scheduled',
             homeScore: null,
-            awayScore: null
+            awayScore: null,
+            firstGoalMinute: null
           });
           setSuccess('Match is gereset naar gepland.');
           setTimeout(() => setSuccess(''), 3000);
         } catch (error) {
+          setError('Fout bij het resetten van de match.');
           handleFirestoreError(error, OperationType.WRITE, 'reset-match');
+        } finally {
+          setSaving(false);
         }
       }
     });
@@ -2535,10 +2543,17 @@ function AdminView({
       message: 'Weet je zeker dat je deze match wilt verwijderen?',
       onConfirm: async () => {
         setConfirmAction(null);
+        setSaving(true);
+        setError('');
         try {
           await deleteDoc(doc(db, 'matches', id));
+          setSuccess('Match succesvol verwijderd.');
+          setTimeout(() => setSuccess(''), 3000);
         } catch (error) {
+          setError('Fout bij het verwijderen van de match.');
           handleFirestoreError(error, OperationType.DELETE, 'matches');
+        } finally {
+          setSaving(false);
         }
       }
     });
@@ -2554,7 +2569,7 @@ function AdminView({
         setError('');
         try {
           // Collect all document references to delete
-          const refsToDelete: any[] = [
+          const refsToDelete: DocumentReference[] = [
             doc(db, 'users', userId),
             doc(db, 'profiles', userId)
           ];
@@ -2774,14 +2789,25 @@ function AdminView({
                 onUpdate={handleUpdateResult}
                 onDelete={handleDeleteMatch}
                 onReset={handleResetMatch}
+                saving={saving}
               />
             ))}
           </div>
         </>
       ) : adminTab === 'bonus' ? (
-        <AdminBonusQuestionsView questions={bonusQuestions} />
+        <AdminBonusQuestionsView 
+          questions={bonusQuestions} 
+          setConfirmAction={setConfirmAction}
+          setSuccess={setSuccess}
+          setError={setError}
+        />
       ) : adminTab === 'polls' ? (
-        <AdminPollsView polls={polls} />
+        <AdminPollsView 
+          polls={polls} 
+          setConfirmAction={setConfirmAction}
+          setSuccess={setSuccess}
+          setError={setError}
+        />
       ) : adminTab === 'users' ? (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
@@ -2800,7 +2826,8 @@ function AdminView({
                   </div>
                   <button 
                     onClick={() => handleDeleteUser(userProfile.uid)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    disabled={saving}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                     title="Gebruiker verwijderen"
                   >
                     <Trash2 size={20} />
@@ -2888,7 +2915,8 @@ const AdminMatchCard: React.FC<{
   onUpdate: (m: Match, h: number, a: number, fgm?: number) => void; 
   onDelete: (id: string) => void;
   onReset: (id: string) => void;
-}> = ({ match, onUpdate, onDelete, onReset }) => {
+  saving?: boolean;
+}> = ({ match, onUpdate, onDelete, onReset, saving }) => {
   const [h, setH] = useState(match.homeScore?.toString() || '');
   const [a, setA] = useState(match.awayScore?.toString() || '');
   const [fgm, setFgm] = useState(match.firstGoalMinute?.toString() || '');
@@ -2897,9 +2925,14 @@ const AdminMatchCard: React.FC<{
   const handleUpdate = async () => {
     if (h === '' || a === '') return;
     setUpdating(true);
-    await onUpdate(match, parseInt(h), parseInt(a), fgm !== '' ? parseInt(fgm) : undefined);
-    setUpdating(false);
+    try {
+      await onUpdate(match, parseInt(h), parseInt(a), fgm !== '' ? parseInt(fgm) : undefined);
+    } finally {
+      setUpdating(false);
+    }
   };
+
+  const isBusy = updating || saving;
 
   return (
     <motion.div 
@@ -2918,7 +2951,8 @@ const AdminMatchCard: React.FC<{
           {match.status === 'finished' && (
             <button 
               onClick={() => onReset(match.id)}
-              className="text-[10px] font-bold text-stone-400 hover:text-stone-600 underline"
+              disabled={isBusy}
+              className="text-[10px] font-bold text-stone-400 hover:text-stone-600 underline disabled:opacity-50"
             >
               Reset naar gepland
             </button>
@@ -2932,16 +2966,18 @@ const AdminMatchCard: React.FC<{
             <input 
               type="number" 
               value={h} 
+              disabled={isBusy}
               onChange={e => setH(e.target.value)}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
               placeholder="H"
             />
             <span className="text-stone-400">-</span>
             <input 
               type="number" 
               value={a} 
+              disabled={isBusy}
               onChange={e => setA(e.target.value)}
-              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+              className="w-12 h-12 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
               placeholder="A"
             />
           </div>
@@ -2952,15 +2988,16 @@ const AdminMatchCard: React.FC<{
           <input 
             type="number" 
             value={fgm} 
+            disabled={isBusy}
             onChange={e => setFgm(e.target.value)}
-            className="w-16 h-10 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none"
+            className="w-16 h-10 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
             placeholder="Min"
           />
         </div>
         
         <button 
           onClick={handleUpdate}
-          disabled={updating || h === '' || a === ''}
+          disabled={isBusy || h === '' || a === ''}
           className="bg-delijn-black text-white px-4 py-2 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
         >
           {updating ? '...' : 'Uitslag'}
@@ -2968,14 +3005,15 @@ const AdminMatchCard: React.FC<{
 
         <button 
           onClick={() => onDelete(match.id)}
-          className="p-2 text-stone-300 hover:text-red-600 transition-colors"
+          disabled={isBusy}
+          className="p-2 text-stone-300 hover:text-red-600 transition-colors disabled:opacity-50"
         >
           <Trash2 size={20} />
         </button>
       </div>
     </motion.div>
   );
-}
+};
 
 function EmptyState({ message }: { message: string }) {
   return (
@@ -3329,7 +3367,17 @@ function SettingsView({
   );
 }
 
-function AdminPollsView({ polls }: { polls: Poll[] }) {
+function AdminPollsView({ 
+  polls, 
+  setConfirmAction,
+  setSuccess,
+  setError
+}: { 
+  polls: Poll[];
+  setConfirmAction: (action: { title: string; message: string; onConfirm: () => void } | null) => void;
+  setSuccess: (msg: string) => void;
+  setError: (msg: string) => void;
+}) {
   const [isAdding, setIsAdding] = useState(false);
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
@@ -3338,6 +3386,7 @@ function AdminPollsView({ polls }: { polls: Poll[] }) {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setError('');
     try {
       const docRef = doc(collection(db, 'polls'));
       await setDoc(docRef, {
@@ -3350,7 +3399,10 @@ function AdminPollsView({ polls }: { polls: Poll[] }) {
       setIsAdding(false);
       setQuestion('');
       setOptions(['', '']);
+      setSuccess('Poll succesvol toegevoegd!');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
+      setError('Fout bij het toevoegen van de poll.');
       handleFirestoreError(error, OperationType.WRITE, 'polls');
     } finally {
       setSaving(false);
@@ -3358,12 +3410,25 @@ function AdminPollsView({ polls }: { polls: Poll[] }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Weet je zeker dat je deze poll wilt verwijderen?')) return;
-    try {
-      await deleteDoc(doc(db, 'polls', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'polls');
-    }
+    setConfirmAction({
+      title: 'Poll verwijderen',
+      message: 'Weet je zeker dat je deze poll wilt verwijderen?',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setSaving(true);
+        setError('');
+        try {
+          await deleteDoc(doc(db, 'polls', id));
+          setSuccess('Poll succesvol verwijderd.');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          setError('Fout bij het verwijderen van de poll.');
+          handleFirestoreError(error, OperationType.DELETE, 'polls');
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   return (
@@ -3474,7 +3539,17 @@ function AdminPollsView({ polls }: { polls: Poll[] }) {
   );
 }
 
-function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) {
+function AdminBonusQuestionsView({ 
+  questions,
+  setConfirmAction,
+  setSuccess,
+  setError
+}: { 
+  questions: BonusQuestion[];
+  setConfirmAction: (action: { title: string; message: string; onConfirm: () => void } | null) => void;
+  setSuccess: (msg: string) => void;
+  setError: (msg: string) => void;
+}) {
   const [newQ, setNewQ] = useState('');
   const [newP, setNewP] = useState('5');
   const [newD, setNewD] = useState('');
@@ -3484,6 +3559,7 @@ function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) 
   const handleAdd = async () => {
     if (!newQ || !newD) return;
     setAdding(true);
+    setError('');
     try {
       await addDoc(collection(db, 'bonusQuestions'), {
         question: newQ,
@@ -3494,39 +3570,69 @@ function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) 
       });
       setNewQ('');
       setNewO('');
+      setSuccess('Bonusvraag succesvol toegevoegd!');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error("Error adding bonus question:", error);
+      setError('Fout bij het toevoegen van de bonusvraag.');
     } finally {
       setAdding(false);
     }
   };
 
+  const handleDelete = async (id: string) => {
+    setConfirmAction({
+      title: 'Bonusvraag verwijderen',
+      message: 'Weet je zeker dat je deze bonusvraag wilt verwijderen?',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setError('');
+        try {
+          await deleteDoc(doc(db, 'bonusQuestions', id));
+          setSuccess('Bonusvraag succesvol verwijderd.');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          setError('Fout bij het verwijderen van de bonusvraag.');
+          handleFirestoreError(error, OperationType.DELETE, 'bonusQuestions');
+        }
+      }
+    });
+  };
+
   const handleUpdateStatus = async (id: string, status: BonusQuestion['status'], correctAnswer?: string) => {
     const update: any = { status };
     if (correctAnswer) update.correctAnswer = correctAnswer;
-    await updateDoc(doc(db, 'bonusQuestions', id), update);
+    setError('');
+    try {
+      await updateDoc(doc(db, 'bonusQuestions', id), update);
 
-    if (status === 'finished' && correctAnswer) {
-      // Award points
-      const answersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('questionId', '==', id)));
-      const batch = writeBatch(db);
-      const question = questions.find(q => q.id === id);
-      
-      const userPointsDelta: Record<string, number> = {};
+      if (status === 'finished' && correctAnswer) {
+        // Award points
+        const answersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('questionId', '==', id)));
+        const batch = writeBatch(db);
+        const question = questions.find(q => q.id === id);
+        
+        const userPointsDelta: Record<string, number> = {};
 
-      answersSnapshot.docs.forEach(ansDoc => {
-        const ans = ansDoc.data() as BonusAnswer;
-        if (ans.answer === correctAnswer) {
-          batch.update(doc(db, 'bonusAnswers', ansDoc.id), { pointsEarned: question?.points });
-          userPointsDelta[ans.userId] = (userPointsDelta[ans.userId] || 0) + (question?.points || 0);
+        answersSnapshot.docs.forEach(ansDoc => {
+          const ans = ansDoc.data() as BonusAnswer;
+          if (ans.answer === correctAnswer) {
+            batch.update(doc(db, 'bonusAnswers', ansDoc.id), { pointsEarned: question?.points });
+            userPointsDelta[ans.userId] = (userPointsDelta[ans.userId] || 0) + (question?.points || 0);
+          }
+        });
+
+        for (const [userId, delta] of Object.entries(userPointsDelta)) {
+          batch.update(doc(db, 'profiles', userId), { totalPoints: increment(delta) });
         }
-      });
 
-      for (const [userId, delta] of Object.entries(userPointsDelta)) {
-        batch.update(doc(db, 'profiles', userId), { totalPoints: increment(delta) });
+        await batch.commit();
       }
-
-      await batch.commit();
+      setSuccess('Status succesvol bijgewerkt.');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError('Fout bij het bijwerken van de status.');
+      handleFirestoreError(error, OperationType.UPDATE, 'bonusQuestions');
     }
   };
 
@@ -3582,7 +3688,7 @@ function AdminBonusQuestionsView({ questions }: { questions: BonusQuestion[] }) 
                 <p className="font-bold">{q.question}</p>
                 <p className="text-xs text-stone-400">Status: {q.status} | Deadline: {format(new Date(q.deadline), 'd MMM HH:mm')}</p>
               </div>
-              <button onClick={() => deleteDoc(doc(db, 'bonusQuestions', q.id))} className="text-stone-300 hover:text-red-600"><Trash2 size={18} /></button>
+              <button onClick={() => handleDelete(q.id)} className="text-stone-300 hover:text-red-600"><Trash2 size={18} /></button>
             </div>
 
             <div className="flex gap-2">
