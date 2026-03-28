@@ -2551,47 +2551,55 @@ function AdminView({
       onConfirm: async () => {
         setConfirmAction(null);
         setSaving(true);
+        setError('');
         try {
-          const batch = writeBatch(db);
+          // Collect all document references to delete
+          const refsToDelete: any[] = [
+            doc(db, 'users', userId),
+            doc(db, 'profiles', userId)
+          ];
           
-          // Delete private user data
-          batch.delete(doc(db, 'users', userId));
-          
-          // Delete public profile
-          batch.delete(doc(db, 'profiles', userId));
-          
-          // Delete predictions
+          // Fetch predictions
           const predictionsSnapshot = await getDocs(query(collection(db, 'predictions'), where('userId', '==', userId)));
-          predictionsSnapshot.docs.forEach(d => batch.delete(d.ref));
+          predictionsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
           
-          // Delete bonus answers
+          // Fetch bonus answers
           const bonusAnswersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('userId', '==', userId)));
-          bonusAnswersSnapshot.docs.forEach(d => batch.delete(d.ref));
+          bonusAnswersSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
           
-          // Delete poll votes
+          // Fetch poll votes
           const pollVotesSnapshot = await getDocs(query(collection(db, 'pollVotes'), where('userId', '==', userId)));
-          pollVotesSnapshot.docs.forEach(d => batch.delete(d.ref));
+          pollVotesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
           
-          // Delete league memberships
+          // Fetch league memberships
           const membershipsSnapshot = await getDocs(query(collection(db, 'leagueMembers'), where('userId', '==', userId)));
-          membershipsSnapshot.docs.forEach(d => batch.delete(d.ref));
+          membershipsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
 
-          // Delete leagues created by user
+          // Fetch leagues created by user
           const leaguesSnapshot = await getDocs(query(collection(db, 'leagues'), where('createdBy', '==', userId)));
-          leaguesSnapshot.docs.forEach(d => batch.delete(d.ref));
+          leaguesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
 
-          // Delete messages
+          // Fetch messages
           const messagesSnapshot = await getDocs(query(collection(db, 'messages'), where('userId', '==', userId)));
-          messagesSnapshot.docs.forEach(d => batch.delete(d.ref));
+          messagesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
           
-          // Delete notifications
+          // Fetch notifications
           const notificationsSnapshot = await getDocs(query(collection(db, 'notifications'), where('userId', '==', userId)));
-          notificationsSnapshot.docs.forEach(d => batch.delete(d.ref));
+          notificationsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
 
-          await batch.commit();
+          // Delete in batches of 500
+          for (let i = 0; i < refsToDelete.length; i += 500) {
+            const batch = writeBatch(db);
+            const chunk = refsToDelete.slice(i, i + 500);
+            chunk.forEach(ref => batch.delete(ref));
+            await batch.commit();
+          }
+
           setSuccess('Gebruiker succesvol verwijderd.');
           setTimeout(() => setSuccess(''), 3000);
         } catch (error) {
+          console.error("Error deleting user:", error);
+          setError('Kon gebruiker niet volledig verwijderen. Controleer de console voor details.');
           handleFirestoreError(error, OperationType.DELETE, 'users');
         } finally {
           setSaving(false);
@@ -2659,6 +2667,13 @@ function AdminView({
         <div className="bg-delijn-yellow/10 border border-delijn-yellow/20 text-delijn-black p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
           <CheckCircle2 size={20} />
           <p className="font-bold">{success}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
+          <AlertCircle size={20} />
+          <p className="font-bold">{error}</p>
         </div>
       )}
 

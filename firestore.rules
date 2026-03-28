@@ -98,7 +98,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((request.auth.token.email == "christoffrotty84@gmail.com" && request.auth.token.email_verified == true) ||
+        ((request.auth.token.email == "christoffrotty84@gmail.com") ||
          (request.auth.token.email == "29076@delijn.be") ||
          (request.auth.token.email == "christoff.rotty@icloud.com") ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -326,7 +326,7 @@ service cloud.firestore {
       allow list: if isAuthenticated();
       allow create: if isAuthenticated() && isValidLeague(request.resource.data);
       allow update: if isAuthenticated() && (isAdmin() || (resource.data.createdBy == request.auth.uid && isValidLeague(request.resource.data)));
-      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
     }
 
     match /leagueMembers/{id} {
