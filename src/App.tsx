@@ -1357,6 +1357,7 @@ function AppContent() {
             bonusQuestions={bonusQuestions} 
             polls={polls} 
             tournamentSettings={tournamentSettings}
+            leaderboard={leaderboard}
           />
         )}
       </main>
@@ -2227,14 +2228,16 @@ function AdminView({
   matches, 
   bonusQuestions, 
   polls,
-  tournamentSettings 
+  tournamentSettings,
+  leaderboard
 }: { 
   matches: Match[]; 
   bonusQuestions: BonusQuestion[]; 
   polls: Poll[];
   tournamentSettings: TournamentSettings | null;
+  leaderboard: UserProfile[];
 }) {
-  const [adminTab, setAdminTab] = useState<'matches' | 'bonus' | 'polls' | 'tournament'>('matches');
+  const [adminTab, setAdminTab] = useState<'matches' | 'bonus' | 'polls' | 'tournament' | 'users'>('matches');
   const [isAdding, setIsAdding] = useState(false);
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
@@ -2539,6 +2542,59 @@ function AdminView({
       }
     });
   };
+
+  const handleDeleteUser = async (userId: string) => {
+    setConfirmAction({
+      title: 'Gebruiker verwijderen',
+      message: 'Weet je zeker dat je deze gebruiker en al zijn/haar gegevens wilt verwijderen? Dit kan niet ongedaan worden gemaakt.',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setSaving(true);
+        try {
+          const batch = writeBatch(db);
+          
+          // Delete private user data
+          batch.delete(doc(db, 'users', userId));
+          
+          // Delete public profile
+          batch.delete(doc(db, 'profiles', userId));
+          
+          // Delete predictions
+          const predictionsSnapshot = await getDocs(query(collection(db, 'predictions'), where('userId', '==', userId)));
+          predictionsSnapshot.docs.forEach(d => batch.delete(d.ref));
+          
+          // Delete bonus answers
+          const bonusAnswersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('userId', '==', userId)));
+          bonusAnswersSnapshot.docs.forEach(d => batch.delete(d.ref));
+          
+          // Delete poll votes
+          const pollVotesSnapshot = await getDocs(query(collection(db, 'pollVotes'), where('userId', '==', userId)));
+          pollVotesSnapshot.docs.forEach(d => batch.delete(d.ref));
+          
+          // Delete league memberships
+          const membershipsSnapshot = await getDocs(query(collection(db, 'leagueMembers'), where('userId', '==', userId)));
+          membershipsSnapshot.docs.forEach(d => batch.delete(d.ref));
+
+          // Delete messages
+          const messagesSnapshot = await getDocs(query(collection(db, 'messages'), where('userId', '==', userId)));
+          messagesSnapshot.docs.forEach(d => batch.delete(d.ref));
+          
+          // Delete notifications
+          const notificationsSnapshot = await getDocs(query(collection(db, 'notifications'), where('userId', '==', userId)));
+          notificationsSnapshot.docs.forEach(d => batch.delete(d.ref));
+
+          await batch.commit();
+          setSuccess('Gebruiker succesvol verwijderd.');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, 'users');
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex gap-4 mb-8">
@@ -2581,6 +2637,16 @@ function AdminView({
         >
           <Trophy size={18} />
           Toernooi
+        </button>
+        <button 
+          onClick={() => setAdminTab('users')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+            adminTab === 'users' ? "bg-delijn-black text-white" : "bg-white text-stone-500 border border-stone-200"
+          )}
+        >
+          <UserIcon size={18} />
+          Gebruikers
         </button>
       </div>
 
@@ -2696,6 +2762,34 @@ function AdminView({
         <AdminBonusQuestionsView questions={bonusQuestions} />
       ) : adminTab === 'polls' ? (
         <AdminPollsView polls={polls} />
+      ) : adminTab === 'users' ? (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+            <h2 className="text-2xl font-bold mb-6">Gebruikers Beheer</h2>
+            <div className="grid gap-4">
+              {leaderboard.map(userProfile => (
+                <div key={userProfile.uid} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl border border-stone-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-white border border-stone-200">
+                      <img src={userProfile.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.displayName}`} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-stone-900">{userProfile.displayName}</p>
+                      <p className="text-xs text-stone-400 font-bold uppercase tracking-widest">{userProfile.totalPoints} Punten</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteUser(userProfile.uid)}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Gebruiker verwijderen"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
