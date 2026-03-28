@@ -259,15 +259,17 @@ service cloud.firestore {
     }
 
     function isBeforeMatchDeadline(matchId) {
-      let matchDoc = get(/databases/$(database)/documents/matches/$(matchId)).data;
-      return request.time < timestamp(matchDoc.date) - duration.value(3600, 's');
+      let matchPath = /databases/$(database)/documents/matches/$(matchId);
+      return exists(matchPath) && request.time < timestamp(get(matchPath).data.date) - duration.value(1, 'h');
     }
 
     match /predictions/{predictionId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidPrediction(request.resource.data) && 
-                      predictionId == request.resource.data.id &&
-                      (isBeforeMatchDeadline(request.resource.data.matchId) || isAdmin());
+      allow create: if isAuthenticated() && 
+                      (isAdmin() || 
+                       (isValidPrediction(request.resource.data) && 
+                        predictionId == request.resource.data.id &&
+                        isBeforeMatchDeadline(request.resource.data.matchId)));
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
                        (resource.data.userId == request.auth.uid && 

@@ -893,7 +893,9 @@ function AppContent() {
     );
 
     const predictionsUnsubscribe = onSnapshot(
-      collection(db, 'predictions'),
+      user.role === 'admin' 
+        ? collection(db, 'predictions')
+        : query(collection(db, 'predictions'), where('userId', '==', user.uid)),
       (snapshot) => {
         setPredictions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Prediction)));
       },
@@ -1553,6 +1555,7 @@ const MatchCard: React.FC<{
   const [firstGoalMinute, setFirstGoalMinute] = useState(prediction?.firstGoalMinute?.toString() || '');
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Track the values that were actually saved to Firestore
   const lastSavedValues = useRef({
@@ -1561,9 +1564,13 @@ const MatchCard: React.FC<{
     minute: prediction?.firstGoalMinute?.toString() || ''
   });
 
+  // Track if we've received the first data for this match
+  const hasLoaded = useRef(false);
+
   // Sync state with props when prediction loads or changes
   useEffect(() => {
     if (prediction) {
+      hasLoaded.current = true;
       const propHome = prediction.homeScore?.toString() || '';
       const propAway = prediction.awayScore?.toString() || '';
       const propMinute = prediction.firstGoalMinute?.toString() || '';
@@ -1578,8 +1585,8 @@ const MatchCard: React.FC<{
       }
     } else if (!prediction && !saving && !showSuccess) {
       // If prediction is removed or doesn't exist, and we're not saving,
-      // only clear if we previously had a saved prediction
-      if (lastSavedValues.current.home !== '' || lastSavedValues.current.away !== '') {
+      // only clear if we previously had a saved prediction AND we've loaded data before
+      if (hasLoaded.current && (lastSavedValues.current.home !== '' || lastSavedValues.current.away !== '')) {
         setHomeScore('');
         setAwayScore('');
         setFirstGoalMinute('');
@@ -1609,6 +1616,7 @@ const MatchCard: React.FC<{
     if (homeScore === '' || awayScore === '') return;
     
     setSaving(true);
+    setError(null);
     try {
       const predData = {
         userId,
@@ -1634,10 +1642,13 @@ const MatchCard: React.FC<{
       
       // Update last saved values immediately for optimistic feel
       lastSavedValues.current = { home: homeScore, away: awayScore, minute: firstGoalMinute };
+      hasLoaded.current = true;
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'predictions');
+    } catch (err: any) {
+      console.error('Error saving prediction:', err);
+      setError(err.message || 'Fout bij het opslaan');
+      handleFirestoreError(err, OperationType.WRITE, 'predictions');
     } finally {
       setSaving(false);
     }
@@ -1682,6 +1693,11 @@ const MatchCard: React.FC<{
           </div>
 
           <div className="flex flex-col items-center gap-4">
+            {error && (
+              <div className="text-red-500 text-[10px] font-bold uppercase tracking-wider bg-red-50 px-3 py-1 rounded-full animate-pulse">
+                {error}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               {match.status === 'finished' ? (
                 <div className="flex items-center gap-4 text-4xl font-black font-display text-slate-900 tracking-tighter">
