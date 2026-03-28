@@ -268,15 +268,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                       (isAdmin() || 
                        (isValidPrediction(request.resource.data) && 
-                        predictionId == request.resource.data.id &&
-                        isBeforeMatchDeadline(request.resource.data.matchId)));
+                        predictionId == request.resource.data.id));
       allow update: if isAuthenticated() && 
                       (isAdmin() || 
                        (resource.data.userId == request.auth.uid && 
                         isValidPrediction(request.resource.data) && 
-                        isBeforeMatchDeadline(resource.data.matchId) &&
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pointsEarned', 'userId', 'matchId', 'id'])));
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isBeforeMatchDeadline(resource.data.matchId));
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     match /bonusQuestions/{questionId} {

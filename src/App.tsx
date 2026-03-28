@@ -1595,7 +1595,7 @@ const MatchCard: React.FC<{
     }
   }, [prediction, saving, showSuccess]);
 
-  const isLocked = !isAdmin && (new Date(match.date).getTime() - 3600000 < Date.now());
+  const isLocked = false; // Deadline restriction removed as requested
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
   const totalPredictions = matchPredictions.length;
