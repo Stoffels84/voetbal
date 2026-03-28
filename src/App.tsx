@@ -1273,6 +1273,16 @@ function AppContent() {
             </div>
             
             <button 
+              onClick={() => setActiveTab('rules')}
+              className={cn(
+                "p-2.5 rounded-2xl transition-all",
+                activeTab === 'rules' ? "bg-theme-primary text-white shadow-lg shadow-theme-primary/20" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              <HelpCircle size={20} />
+            </button>
+
+            <button 
               onClick={() => setActiveTab('settings')}
               className="p-2.5 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
             >
@@ -1464,6 +1474,47 @@ function PredictionsView({
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Scoring Rules Tile */}
+      <div className="bg-slate-900 rounded-[2.5rem] p-8 mb-12 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-theme-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-theme-primary/20 transition-colors duration-700" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
+                <Trophy className="text-theme-primary" size={20} />
+              </div>
+              <h3 className="text-xl font-black text-white uppercase tracking-tight">Puntentelling</h3>
+            </div>
+            <p className="text-white/60 text-sm font-bold leading-relaxed max-w-md">
+              Voorspel de scores en beklim het klassement! Punten worden als volgt verdeeld:
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-4 flex items-center gap-4 min-w-[140px]">
+              <div className="w-10 h-10 rounded-xl bg-theme-primary flex items-center justify-center text-white font-black text-lg shadow-lg shadow-theme-primary/20">3</div>
+              <div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Correct</p>
+                <p className="text-xs font-bold text-white">Exacte score</p>
+              </div>
+            </div>
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-4 flex items-center gap-4 min-w-[140px]">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white font-black text-lg">1</div>
+              <div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Winnaar</p>
+                <p className="text-xs font-bold text-white">Juiste winnaar</p>
+              </div>
+            </div>
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-4 flex items-center gap-4 min-w-[140px]">
+              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 font-black text-lg">0</div>
+              <div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Fout</p>
+                <p className="text-xs font-bold text-white">Alles onjuist</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <section>
         <div className="flex items-center justify-between mb-8">
           <div>
