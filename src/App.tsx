@@ -756,7 +756,7 @@ function AppContent() {
   const [user, setUser] = useState<UserPrivate | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls' | 'h2h' | 'leagues'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'leaderboard' | 'admin' | 'rules' | 'bonus' | 'chat' | 'settings' | 'polls' | 'h2h' | 'leagues' | 'standings'>('predictions');
   const [h2hTargetId, setH2hTargetId] = useState<string | null>(null);
   const [previewTeam, setPreviewTeam] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1310,6 +1310,9 @@ function AppContent() {
             isAdmin={user.role === 'admin'} 
           />
         )}
+        {activeTab === 'standings' && (
+          <TournamentStandingsView matches={matches} />
+        )}
         {activeTab === 'leaderboard' && (
           <LeaderboardView 
             leaderboard={leaderboard} 
@@ -1389,6 +1392,12 @@ function AppContent() {
             onClick={() => setActiveTab('leaderboard')}
             icon={<Trophy />}
             label="Klassement"
+          />
+          <TabButton 
+            active={activeTab === 'standings'} 
+            onClick={() => setActiveTab('standings')}
+            icon={<PieChart />}
+            label="Standen"
           />
           <TabButton 
             active={activeTab === 'leagues'} 
@@ -2293,6 +2302,242 @@ function LeaderboardView({
   );
 }
 
+function TeamFlag({ team, size = 24 }: { team: string; size?: number }) {
+  const flagMap: Record<string, string> = {
+    'België': 'be',
+    'Duitsland': 'de',
+    'Frankrijk': 'fr',
+    'Spanje': 'es',
+    'Engeland': 'gb',
+    'Italië': 'it',
+    'Nederland': 'nl',
+    'Portugal': 'pt',
+    'Brazilië': 'br',
+    'Argentinië': 'ar',
+    'Marokko': 'ma',
+    'Kroatië': 'hr',
+    'Mexico': 'mx',
+    'Zuid-Afrika': 'za',
+    'Zuid-Korea': 'kr',
+    'Canada': 'ca',
+    'Qatar': 'qa',
+    'Zwitserland': 'ch',
+    'Schotland': 'gb-sct',
+    'Oostenrijk': 'at',
+    'Denemarken': 'dk',
+    'Slovenië': 'si',
+    'Servië': 'rs',
+    'Polen': 'pl',
+    'Hongarije': 'hu',
+    'Albanië': 'al',
+    'Tsjechië': 'cz',
+    'Turkije': 'tr',
+    'Georgië': 'ge',
+    'Slowakije': 'sk',
+    'Roemenië': 'ro',
+    'Oekraïne': 'ua',
+    'Haïti': 'ht',
+    'N.t.b.': 'un'
+  };
+
+  const code = flagMap[team] || 'un';
+  
+  if (code === 'un') {
+    return <ShieldCheck size={size} className="text-slate-300" />;
+  }
+
+  return (
+    <img 
+      src={`https://flagcdn.com/w80/${code.toLowerCase()}.png`} 
+      alt={team}
+      className="object-cover"
+      style={{ width: size, height: size }}
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
+interface TeamStanding {
+  team: string;
+  played: number;
+  won: number;
+  draw: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+function calculateStandings(matches: Match[]): Record<string, TeamStanding[]> {
+  const groups: Record<string, Record<string, TeamStanding>> = {};
+
+  matches.forEach(match => {
+    if (match.type !== 'group' || !match.group) return;
+    
+    if (!groups[match.group]) groups[match.group] = {};
+    if (!groups[match.group][match.homeTeam]) {
+      groups[match.group][match.homeTeam] = { team: match.homeTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    }
+    if (!groups[match.group][match.awayTeam]) {
+      groups[match.group][match.awayTeam] = { team: match.awayTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    }
+
+    if (match.status !== 'finished') return;
+
+    const { homeTeam, awayTeam, homeScore, awayScore } = match;
+    if (homeScore === undefined || awayScore === undefined) return;
+
+    const home = groups[match.group][homeTeam];
+    const away = groups[match.group][awayTeam];
+
+    home.played++;
+    away.played++;
+    home.goalsFor += homeScore;
+    home.goalsAgainst += awayScore;
+    away.goalsFor += awayScore;
+    away.goalsAgainst += homeScore;
+    home.goalDifference = home.goalsFor - home.goalsAgainst;
+    away.goalDifference = away.goalsFor - away.goalsAgainst;
+
+    if (homeScore > awayScore) {
+      home.won++;
+      home.points += 3;
+      away.lost++;
+    } else if (homeScore < awayScore) {
+      away.won++;
+      away.points += 3;
+      home.lost++;
+    } else {
+      home.draw++;
+      away.draw++;
+      home.points += 1;
+      away.points += 1;
+    }
+  });
+
+  const result: Record<string, TeamStanding[]> = {};
+  Object.keys(groups).sort().forEach(groupName => {
+    result[groupName] = Object.values(groups[groupName]).sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+      return b.goalsFor - a.goalsFor;
+    });
+  });
+
+  return result;
+}
+
+function TournamentStandingsView({ matches }: { matches: Match[] }) {
+  const [activeSubTab, setActiveSubTab] = useState<'groups' | 'knockout'>('groups');
+  const standings = useMemo(() => calculateStandings(matches), [matches]);
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 font-display uppercase tracking-tight">Toernooi Standen</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Volg de weg naar de finale</p>
+        </div>
+      </div>
+
+      <div className="flex gap-2 p-1.5 bg-slate-100 rounded-[2rem] w-fit mb-8">
+        <button 
+          onClick={() => setActiveSubTab('groups')}
+          className={cn(
+            "px-8 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all",
+            activeSubTab === 'groups' ? "bg-white text-slate-900 shadow-xl shadow-slate-200" : "text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Groepsfase
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('knockout')}
+          className={cn(
+            "px-8 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all",
+            activeSubTab === 'knockout' ? "bg-white text-slate-900 shadow-xl shadow-slate-200" : "text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Knock-outfase
+        </button>
+      </div>
+
+      {activeSubTab === 'groups' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {Object.entries(standings).map(([groupName, teams]) => {
+            const groupTeams = teams as TeamStanding[];
+            return (
+              <div key={groupName} className="glass-card rounded-[2.5rem] overflow-hidden border-2 border-slate-50">
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                  <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight">Groep {groupName}</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
+                        <th className="px-6 py-4">#</th>
+                        <th className="px-6 py-4">Team</th>
+                        <th className="px-2 py-4 text-center">G</th>
+                        <th className="px-2 py-4 text-center">W</th>
+                        <th className="px-2 py-4 text-center">G</th>
+                        <th className="px-2 py-4 text-center">V</th>
+                        <th className="px-2 py-4 text-center">DV</th>
+                        <th className="px-2 py-4 text-center">DT</th>
+                        <th className="px-2 py-4 text-center">DS</th>
+                        <th className="px-6 py-4 text-center">Pnt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {groupTeams.map((standing, idx) => (
+                      <tr key={standing.team} className="group hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className={cn(
+                            "w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black",
+                            idx < 2 ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
+                               <TeamFlag team={standing.team} size={20} />
+                            </div>
+                            <span className="text-sm font-bold text-slate-900">{standing.team}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.played}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.won}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.draw}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.lost}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.goalsFor}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.goalsAgainst}</td>
+                        <td className="px-2 py-4 text-center text-xs font-bold text-slate-600">{standing.goalDifference}</td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm font-black text-slate-900">{standing.points}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      ) : (
+        <div className="glass-card rounded-[2.5rem] p-12 text-center border-2 border-slate-50">
+          <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+            <PieChart className="text-slate-300" size={32} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight mb-2">Bracket volgt binnenkort</h3>
+          <p className="text-sm font-bold text-slate-400 max-w-xs mx-auto">De knock-outfase wordt zichtbaar zodra de groepsfase is afgerond.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminView({ 
   matches, 
   bonusQuestions, 
@@ -2311,6 +2556,8 @@ function AdminView({
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
   const [date, setDate] = useState('');
+  const [matchType, setMatchType] = useState<'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'>('group');
+  const [group, setGroup] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -2392,6 +2639,8 @@ function AdminView({
         awayTeam,
         date: new Date(date).toISOString(),
         status: 'scheduled' as const,
+        type: matchType,
+        group: matchType === 'group' ? group : undefined,
       };
       const docRef = doc(collection(db, 'matches'));
       await setDoc(docRef, { id: docRef.id, ...matchData });
@@ -2399,6 +2648,8 @@ function AdminView({
       setHomeTeam('');
       setAwayTeam('');
       setDate('');
+      setMatchType('group');
+      setGroup('');
       setSuccess('Match succesvol toegevoegd!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
@@ -2878,6 +3129,32 @@ function AdminView({
                     className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Type</label>
+                  <select 
+                    value={matchType}
+                    onChange={e => setMatchType(e.target.value as any)}
+                    className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                  >
+                    <option value="group">Groepsfase</option>
+                    <option value="round_of_16">Achtste Finale</option>
+                    <option value="quarter_final">Kwartfinale</option>
+                    <option value="semi_final">Halve Finale</option>
+                    <option value="final">Finale</option>
+                  </select>
+                </div>
+                {matchType === 'group' && (
+                  <div>
+                    <label className="block text-xs font-bold text-stone-400 uppercase mb-1">Groep</label>
+                    <input 
+                      required
+                      value={group}
+                      onChange={e => setGroup(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
+                      placeholder="Bijv. A"
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-stone-500 font-bold">Annuleren</button>
@@ -3053,7 +3330,14 @@ const AdminMatchCard: React.FC<{
       className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
     >
       <div className="flex-1">
-        <p className="text-xs font-bold text-stone-400 mb-1">{format(new Date(match.date), 'd MMM yyyy HH:mm')}</p>
+        <p className="text-xs font-bold text-stone-400 mb-1">
+          {format(new Date(match.date), 'd MMM yyyy HH:mm')}
+          {match.type && (
+            <span className="ml-2 text-delijn-black bg-stone-100 px-2 py-0.5 rounded text-[10px]">
+              {match.type === 'group' ? `Groep ${match.group}` : match.type.replace(/_/g, ' ').toUpperCase()}
+            </span>
+          )}
+        </p>
         <p className="font-bold text-lg">{match.homeTeam} vs {match.awayTeam}</p>
         <div className="flex items-center gap-3 mt-1">
           <p className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", match.status === 'finished' ? "bg-delijn-yellow text-delijn-black" : "bg-amber-100 text-amber-700")}>

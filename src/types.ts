@@ -26,6 +26,7 @@ export interface Match {
   firstGoalMinute?: number;
   status: 'scheduled' | 'finished';
   type?: 'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
+  group?: string;
   matchNumber?: number; // For bracket positioning
 }
 
