@@ -1292,7 +1292,7 @@ function AppContent() {
         {activeTab === 'predictions' && (
           <PredictionsView 
             matches={matches} 
-            predictions={myPredictions} 
+            predictions={predictions} 
             userId={user.uid} 
             isAdmin={user.role === 'admin'} 
           />
@@ -1562,27 +1562,28 @@ const MatchCard: React.FC<{
 
   // Sync state with props when prediction loads or changes
   useEffect(() => {
-    if (prediction && !saving) {
+    if (prediction) {
       const propHome = prediction.homeScore?.toString() || '';
       const propAway = prediction.awayScore?.toString() || '';
       const propMinute = prediction.firstGoalMinute?.toString() || '';
       
-      // Update our reference of what's in the DB
-      lastSavedValues.current = { home: propHome, away: propAway, minute: propMinute };
-
-      // Only sync if the user hasn't made local changes that differ from what's in the DB
-      // OR if we're not in the middle of a success state
-      if (!showSuccess) {
+      // Only sync if the server data is DIFFERENT from what we last saved
+      // AND we are not currently saving
+      if (!saving && (propHome !== lastSavedValues.current.home || propAway !== lastSavedValues.current.away || propMinute !== lastSavedValues.current.minute)) {
         setHomeScore(propHome);
         setAwayScore(propAway);
         setFirstGoalMinute(propMinute);
+        lastSavedValues.current = { home: propHome, away: propAway, minute: propMinute };
       }
     } else if (!prediction && !saving && !showSuccess) {
-      // If prediction is removed (e.g. by admin), clear local state
-      setHomeScore('');
-      setAwayScore('');
-      setFirstGoalMinute('');
-      lastSavedValues.current = { home: '', away: '', minute: '' };
+      // If prediction is removed or doesn't exist, and we're not saving,
+      // only clear if we previously had a saved prediction
+      if (lastSavedValues.current.home !== '' || lastSavedValues.current.away !== '') {
+        setHomeScore('');
+        setAwayScore('');
+        setFirstGoalMinute('');
+        lastSavedValues.current = { home: '', away: '', minute: '' };
+      }
     }
   }, [prediction, saving, showSuccess]);
 
@@ -2574,6 +2575,10 @@ function AdminView({
           // Delete league memberships
           const membershipsSnapshot = await getDocs(query(collection(db, 'leagueMembers'), where('userId', '==', userId)));
           membershipsSnapshot.docs.forEach(d => batch.delete(d.ref));
+
+          // Delete leagues created by user
+          const leaguesSnapshot = await getDocs(query(collection(db, 'leagues'), where('createdBy', '==', userId)));
+          leaguesSnapshot.docs.forEach(d => batch.delete(d.ref));
 
           // Delete messages
           const messagesSnapshot = await getDocs(query(collection(db, 'messages'), where('userId', '==', userId)));
