@@ -2655,6 +2655,22 @@ function AdminView({
         </button>
       </div>
 
+      {success && (
+        <div className="bg-delijn-yellow/10 border border-delijn-yellow/20 text-delijn-black p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
+          <CheckCircle2 size={20} />
+          <p className="font-bold">{success}</p>
+        </div>
+      )}
+
+      {confirmAction && (
+        <ConfirmationModal 
+          title={confirmAction.title}
+          message={confirmAction.message}
+          onConfirm={confirmAction.onConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+
       {adminTab === 'matches' ? (
         <>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -2687,22 +2703,6 @@ function AdminView({
               </button>
             </div>
           </div>
-
-          {success && (
-            <div className="bg-delijn-yellow/10 border border-delijn-yellow/20 text-delijn-black p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
-              <CheckCircle2 size={20} />
-              <p className="font-bold">{success}</p>
-            </div>
-          )}
-
-          {confirmAction && (
-            <ConfirmationModal 
-              title={confirmAction.title}
-              message={confirmAction.message}
-              onConfirm={confirmAction.onConfirm}
-              onCancel={() => setConfirmAction(null)}
-            />
-          )}
 
           {isAdding && (
             <form onSubmit={handleAddMatch} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-lg animate-in fade-in slide-in-from-top-4">
