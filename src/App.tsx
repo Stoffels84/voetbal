@@ -2574,47 +2574,65 @@ function AdminView({
             doc(db, 'profiles', userId)
           ];
           
-          // Fetch predictions
-          const predictionsSnapshot = await getDocs(query(collection(db, 'predictions'), where('userId', '==', userId)));
-          predictionsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
-          
-          // Fetch bonus answers
-          const bonusAnswersSnapshot = await getDocs(query(collection(db, 'bonusAnswers'), where('userId', '==', userId)));
-          bonusAnswersSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
-          
-          // Fetch poll votes
-          const pollVotesSnapshot = await getDocs(query(collection(db, 'pollVotes'), where('userId', '==', userId)));
-          pollVotesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
-          
-          // Fetch league memberships
-          const membershipsSnapshot = await getDocs(query(collection(db, 'leagueMembers'), where('userId', '==', userId)));
-          membershipsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
+          // Helper to fetch all docs for a query (handling potential pagination if needed, though getDocs is usually fine for a few thousand)
+          const fetchAllRefs = async (colName: string, field: string, value: string) => {
+            const q = query(collection(db, colName), where(field, '==', value));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(d => d.ref);
+          };
 
-          // Fetch leagues created by user
-          const leaguesSnapshot = await getDocs(query(collection(db, 'leagues'), where('createdBy', '==', userId)));
-          leaguesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
-
-          // Fetch messages
-          const messagesSnapshot = await getDocs(query(collection(db, 'messages'), where('userId', '==', userId)));
-          messagesSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
+          console.log("Collecting data for deletion...");
           
-          // Fetch notifications
-          const notificationsSnapshot = await getDocs(query(collection(db, 'notifications'), where('userId', '==', userId)));
-          notificationsSnapshot.docs.forEach(d => refsToDelete.push(d.ref));
+          // Fetch all associated data
+          const [
+            predictions,
+            bonusAnswers,
+            pollVotes,
+            memberships,
+            leagues,
+            notifications,
+            messages
+          ] = await Promise.all([
+            fetchAllRefs('predictions', 'userId', userId),
+            fetchAllRefs('bonusAnswers', 'userId', userId),
+            fetchAllRefs('pollVotes', 'userId', userId),
+            fetchAllRefs('leagueMembers', 'userId', userId),
+            fetchAllRefs('leagues', 'createdBy', userId),
+            fetchAllRefs('notifications', 'userId', userId),
+            fetchAllRefs('messages', 'userId', userId)
+          ]);
 
-          // Delete in batches of 500
-          for (let i = 0; i < refsToDelete.length; i += 500) {
-            const batch = writeBatch(db);
-            const chunk = refsToDelete.slice(i, i + 500);
-            chunk.forEach(ref => batch.delete(ref));
-            await batch.commit();
+          refsToDelete.push(...predictions, ...bonusAnswers, ...pollVotes, ...memberships, ...notifications, ...messages);
+
+          // For leagues created by user, also delete their members
+          for (const leagueRef of leagues) {
+            refsToDelete.push(leagueRef);
+            const leagueMembers = await fetchAllRefs('leagueMembers', 'leagueId', leagueRef.id);
+            refsToDelete.push(...leagueMembers);
           }
 
-          setSuccess('Gebruiker succesvol verwijderd.');
-          setTimeout(() => setSuccess(''), 3000);
+          // Remove duplicates and filter out any invalid refs
+          const uniqueRefs = Array.from(new Set(refsToDelete.map(r => r.path)))
+            .map(path => doc(db, path));
+
+          console.log(`Deleting ${uniqueRefs.length} documents for user ${userId}`);
+
+          // Delete in batches of 500
+          let deletedCount = 0;
+          for (let i = 0; i < uniqueRefs.length; i += 500) {
+            const batch = writeBatch(db);
+            const chunk = uniqueRefs.slice(i, i + 500);
+            chunk.forEach(ref => batch.delete(ref));
+            await batch.commit();
+            deletedCount += chunk.length;
+            console.log(`Deleted batch ${Math.floor(i / 500) + 1} (${deletedCount}/${uniqueRefs.length})`);
+          }
+
+          setSuccess(`Gebruiker en ${deletedCount} bijbehorende documenten succesvol verwijderd.`);
+          setTimeout(() => setSuccess(''), 5000);
         } catch (error) {
           console.error("Error deleting user:", error);
-          setError('Kon gebruiker niet volledig verwijderen. Controleer de console voor details.');
+          setError('Kon gebruiker niet volledig verwijderen. Sommige gegevens zijn mogelijk achtergebleven.');
           handleFirestoreError(error, OperationType.DELETE, 'users');
         } finally {
           setSaving(false);
@@ -3385,6 +3403,7 @@ function AdminPollsView({
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError('');
     try {
@@ -3528,7 +3547,8 @@ function AdminPollsView({
             </div>
             <button 
               onClick={() => handleDelete(poll.id)}
-              className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+              disabled={saving}
+              className="p-2 text-stone-400 hover:text-red-600 transition-colors disabled:opacity-50"
             >
               <Trash2 size={18} />
             </button>
@@ -3554,11 +3574,11 @@ function AdminBonusQuestionsView({
   const [newP, setNewP] = useState('5');
   const [newD, setNewD] = useState('');
   const [newO, setNewO] = useState('');
-  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handleAdd = async () => {
-    if (!newQ || !newD) return;
-    setAdding(true);
+    if (!newQ || !newD || saving) return;
+    setSaving(true);
     setError('');
     try {
       await addDoc(collection(db, 'bonusQuestions'), {
@@ -3575,8 +3595,9 @@ function AdminBonusQuestionsView({
     } catch (error) {
       console.error("Error adding bonus question:", error);
       setError('Fout bij het toevoegen van de bonusvraag.');
+      handleFirestoreError(error, OperationType.WRITE, 'bonusQuestions');
     } finally {
-      setAdding(false);
+      setSaving(false);
     }
   };
 
@@ -3586,6 +3607,7 @@ function AdminBonusQuestionsView({
       message: 'Weet je zeker dat je deze bonusvraag wilt verwijderen?',
       onConfirm: async () => {
         setConfirmAction(null);
+        setSaving(true);
         setError('');
         try {
           await deleteDoc(doc(db, 'bonusQuestions', id));
@@ -3594,14 +3616,18 @@ function AdminBonusQuestionsView({
         } catch (error) {
           setError('Fout bij het verwijderen van de bonusvraag.');
           handleFirestoreError(error, OperationType.DELETE, 'bonusQuestions');
+        } finally {
+          setSaving(false);
         }
       }
     });
   };
 
   const handleUpdateStatus = async (id: string, status: BonusQuestion['status'], correctAnswer?: string) => {
+    if (saving) return;
     const update: any = { status };
     if (correctAnswer) update.correctAnswer = correctAnswer;
+    setSaving(true);
     setError('');
     try {
       await updateDoc(doc(db, 'bonusQuestions', id), update);
@@ -3633,6 +3659,8 @@ function AdminBonusQuestionsView({
     } catch (error) {
       setError('Fout bij het bijwerken van de status.');
       handleFirestoreError(error, OperationType.UPDATE, 'bonusQuestions');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -3672,10 +3700,10 @@ function AdminBonusQuestionsView({
           />
           <button 
             onClick={handleAdd}
-            disabled={adding || !newQ || !newD}
+            disabled={saving || !newQ || !newD}
             className="bg-delijn-black text-white py-3 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
           >
-            Vraag Toevoegen
+            {saving ? 'Bezig...' : 'Vraag Toevoegen'}
           </button>
         </div>
       </section>
@@ -3688,12 +3716,24 @@ function AdminBonusQuestionsView({
                 <p className="font-bold">{q.question}</p>
                 <p className="text-xs text-stone-400">Status: {q.status} | Deadline: {format(new Date(q.deadline), 'd MMM HH:mm')}</p>
               </div>
-              <button onClick={() => handleDelete(q.id)} className="text-stone-300 hover:text-red-600"><Trash2 size={18} /></button>
+              <button 
+                onClick={() => handleDelete(q.id)} 
+                disabled={saving}
+                className="text-stone-300 hover:text-red-600 disabled:opacity-50"
+              >
+                <Trash2 size={18} />
+              </button>
             </div>
 
             <div className="flex gap-2">
               {q.status === 'open' && (
-                <button onClick={() => handleUpdateStatus(q.id, 'closed')} className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-xs font-bold">Sluiten</button>
+                <button 
+                  onClick={() => handleUpdateStatus(q.id, 'closed')} 
+                  disabled={saving}
+                  className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-xs font-bold disabled:opacity-50"
+                >
+                  Sluiten
+                </button>
               )}
               {q.status === 'closed' && (
                 <div className="flex gap-2 w-full">
@@ -3708,7 +3748,8 @@ function AdminBonusQuestionsView({
                       const val = (document.getElementById(`correct-${q.id}`) as HTMLInputElement).value;
                       if (val) handleUpdateStatus(q.id, 'finished', val);
                     }}
-                    className="bg-theme-primary text-theme-text px-3 py-1 rounded-lg text-xs font-bold"
+                    disabled={saving}
+                    className="bg-theme-primary text-theme-text px-3 py-1 rounded-lg text-xs font-bold disabled:opacity-50"
                   >
                     Bevestig & Punten
                   </button>
