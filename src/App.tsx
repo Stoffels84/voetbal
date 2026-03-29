@@ -89,6 +89,16 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function formatLastOnline(timestamp: any) {
+  if (!timestamp) return null;
+  try {
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return format(date, 'dd-MM-yyyy & HH:mm');
+  } catch (e) {
+    return null;
+  }
+}
+
 const TEAM_COLORS: Record<string, { primary: string, secondary: string, text: string }> = {
   'België': { primary: '#E30613', secondary: '#FFD200', text: '#000000' },
   'Duitsland': { primary: '#000000', secondary: '#FFD200', text: '#FFFFFF' },
@@ -552,6 +562,12 @@ function LeagueDetailView({
                 </div>
                 <div className="flex-1">
                   <p className="font-black text-slate-900 uppercase tracking-tight text-base">{member.displayName}</p>
+                  {member.lastOnline && (
+                    <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                      <Clock size={10} />
+                      <span>Laatst online: {formatLastOnline(member.lastOnline)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-black font-display text-slate-900">{member.totalPoints}</p>
@@ -879,6 +895,38 @@ function AppContent() {
 
     return () => unsubscribe();
   }, []);
+
+  // Update last online
+  useEffect(() => {
+    if (user?.uid) {
+      const updateLastOnline = async () => {
+        try {
+          // Update profile
+          await updateDoc(doc(db, 'profiles', user.uid), {
+            lastOnline: serverTimestamp()
+          });
+
+          // Update all league memberships
+          const q = query(collection(db, 'leagueMembers'), where('userId', '==', user.uid));
+          const snap = await getDocs(q);
+          const batch = writeBatch(db);
+          snap.docs.forEach(memberDoc => {
+            batch.update(memberDoc.ref, { lastOnline: serverTimestamp() });
+          });
+          if (!snap.empty) {
+            await batch.commit();
+          }
+        } catch (error) {
+          // Ignore errors for this non-critical update
+        }
+      };
+      updateLastOnline();
+      
+      // Also update periodically if the user stays on the page
+      const interval = setInterval(updateLastOnline, 5 * 60 * 1000); // Every 5 minutes
+      return () => clearInterval(interval);
+    }
+  }, [user?.uid]);
 
   // Data Listeners
   useEffect(() => {
@@ -2268,11 +2316,19 @@ function LeaderboardView({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    {entry.uid === currentUserId && (
-                      <span className="text-[9px] bg-theme-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg shadow-theme-primary/20">Jij</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-3">
+                      {entry.uid === currentUserId && (
+                        <span className="text-[9px] bg-theme-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg shadow-theme-primary/20">Jij</span>
+                      )}
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] truncate">Level {Math.floor(entry.totalPoints / 10) + 1} Pro</p>
+                    </div>
+                    {entry.lastOnline && (
+                      <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                        <Clock size={10} />
+                        <span>Laatst online: {formatLastOnline(entry.lastOnline)}</span>
+                      </div>
                     )}
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] truncate">Level {Math.floor(entry.totalPoints / 10) + 1} Pro</p>
                   </div>
                 </div>
 

@@ -8,6 +8,7 @@ export interface UserProfile {
   previousRank?: number;
   rankHistory?: { timestamp: any; rank: number }[];
   topScorer?: string;
+  lastOnline?: any;
 }
 
 export interface UserPrivate {
@@ -57,6 +58,7 @@ export interface LeagueMember {
   joinedAt: any;
   displayName: string;
   totalPoints: number;
+  lastOnline?: any;
 }
 
 export interface BonusQuestion {
