@@ -2861,6 +2861,20 @@ function AdminView({
     });
   };
 
+  const handleFullUpdateMatch = async (id: string, data: Partial<Match>) => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'matches', id), data);
+      setSuccess('Match details bijgewerkt!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError('Fout bij het bijwerken van match details.');
+      handleFirestoreError(error, OperationType.WRITE, 'update-match-details');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleResetMatch = async (matchId: string) => {
     setConfirmAction({
       title: 'Match resetten',
@@ -3208,6 +3222,7 @@ function AdminView({
                 key={match.id} 
                 match={match} 
                 onUpdate={handleUpdateResult}
+                onFullUpdate={handleFullUpdateMatch}
                 onDelete={handleDeleteMatch}
                 onReset={handleResetMatch}
                 saving={saving}
@@ -3334,20 +3349,41 @@ function AdminView({
 const AdminMatchCard: React.FC<{ 
   match: Match; 
   onUpdate: (m: Match, h: number, a: number, fgm?: number) => void; 
+  onFullUpdate: (id: string, data: Partial<Match>) => void;
   onDelete: (id: string) => void;
   onReset: (id: string) => void;
   saving?: boolean;
-}> = ({ match, onUpdate, onDelete, onReset, saving }) => {
+}> = ({ match, onUpdate, onFullUpdate, onDelete, onReset, saving }) => {
   const [h, setH] = useState(match.homeScore?.toString() || '');
   const [a, setA] = useState(match.awayScore?.toString() || '');
   const [fgm, setFgm] = useState(match.firstGoalMinute?.toString() || '');
   const [updating, setUpdating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Edit states
+  const [editHome, setEditHome] = useState(match.homeTeam);
+  const [editAway, setEditAway] = useState(match.awayTeam);
+  const [editDate, setEditDate] = useState(new Date(match.date).toISOString().slice(0, 16));
 
   const handleUpdate = async () => {
     if (h === '' || a === '') return;
     setUpdating(true);
     try {
       await onUpdate(match, parseInt(h), parseInt(a), fgm !== '' ? parseInt(fgm) : undefined);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    setUpdating(true);
+    try {
+      await onFullUpdate(match.id, {
+        homeTeam: editHome,
+        awayTeam: editAway,
+        date: new Date(editDate).toISOString()
+      });
+      setIsEditing(false);
     } finally {
       setUpdating(false);
     }
@@ -3363,29 +3399,77 @@ const AdminMatchCard: React.FC<{
       className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
     >
       <div className="flex-1">
-        <p className="text-xs font-bold text-stone-400 mb-1">
-          {format(new Date(match.date), 'd MMM yyyy HH:mm')}
-          {match.type && (
-            <span className="ml-2 text-delijn-black bg-stone-100 px-2 py-0.5 rounded text-[10px]">
-              {match.type === 'group' ? `Groep ${match.group}` : match.type.replace(/_/g, ' ').toUpperCase()}
-            </span>
-          )}
-        </p>
-        <p className="font-bold text-lg">{match.homeTeam} vs {match.awayTeam}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <p className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", match.status === 'finished' ? "bg-delijn-yellow text-delijn-black" : "bg-amber-100 text-amber-700")}>
-            {match.status === 'finished' ? 'Afgelopen' : 'Gepland'}
-          </p>
-          {match.status === 'finished' && (
-            <button 
-              onClick={() => onReset(match.id)}
-              disabled={isBusy}
-              className="text-[10px] font-bold text-stone-400 hover:text-stone-600 underline disabled:opacity-50"
-            >
-              Reset naar gepland
-            </button>
-          )}
-        </div>
+        {isEditing ? (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input 
+                value={editHome}
+                onChange={e => setEditHome(e.target.value)}
+                className="flex-1 bg-stone-50 border border-stone-200 p-2 rounded-lg text-sm font-bold"
+                placeholder="Thuis"
+              />
+              <span className="text-stone-400 self-center">vs</span>
+              <input 
+                value={editAway}
+                onChange={e => setEditAway(e.target.value)}
+                className="flex-1 bg-stone-50 border border-stone-200 p-2 rounded-lg text-sm font-bold"
+                placeholder="Uit"
+              />
+            </div>
+            <input 
+              type="datetime-local"
+              value={editDate}
+              onChange={e => setEditDate(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-200 p-2 rounded-lg text-xs font-bold"
+            />
+            <div className="flex gap-2">
+              <button 
+                onClick={handleSaveEdit}
+                className="bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-emerald-600"
+              >
+                Opslaan
+              </button>
+              <button 
+                onClick={() => setIsEditing(false)}
+                className="bg-stone-200 text-stone-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-stone-300"
+              >
+                Annuleren
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs font-bold text-stone-400 mb-1">
+              {format(new Date(match.date), 'd MMM yyyy HH:mm')}
+              {match.type && (
+                <span className="ml-2 text-delijn-black bg-stone-100 px-2 py-0.5 rounded text-[10px]">
+                  {match.type === 'group' ? `Groep ${match.group}` : match.type.replace(/_/g, ' ').toUpperCase()}
+                </span>
+              )}
+              <button 
+                onClick={() => setIsEditing(true)}
+                className="ml-2 text-delijn-black hover:underline text-[10px] font-bold"
+              >
+                Bewerk details
+              </button>
+            </p>
+            <p className="font-bold text-lg">{match.homeTeam} vs {match.awayTeam}</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", match.status === 'finished' ? "bg-delijn-yellow text-delijn-black" : "bg-amber-100 text-amber-700")}>
+                {match.status === 'finished' ? 'Afgelopen' : 'Gepland'}
+              </p>
+              {match.status === 'finished' && (
+                <button 
+                  onClick={() => onReset(match.id)}
+                  disabled={isBusy}
+                  className="text-[10px] font-bold text-stone-400 hover:text-stone-600 underline disabled:opacity-50"
+                >
+                  Reset naar gepland
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
