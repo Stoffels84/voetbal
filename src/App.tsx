@@ -1746,8 +1746,9 @@ const MatchCard: React.FC<{
 
         <div className="flex items-center justify-between gap-4 sm:gap-12">
           <div className="flex-1 flex flex-col items-center gap-3 text-center">
-            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500">
-              <span className="text-2xl font-black text-slate-900 font-display">{match.homeTeam.substring(0, 3).toUpperCase()}</span>
+            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex flex-col items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500 overflow-hidden">
+              <TeamFlag team={match.homeTeam} size={32} />
+              <span className="text-[10px] font-black text-slate-400 mt-1">{match.homeTeam.substring(0, 3).toUpperCase()}</span>
             </div>
             <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{match.homeTeam}</p>
           </div>
@@ -1840,8 +1841,9 @@ const MatchCard: React.FC<{
           </div>
 
           <div className="flex-1 flex flex-col items-center gap-3 text-center">
-            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500">
-              <span className="text-2xl font-black text-slate-900 font-display">{match.awayTeam.substring(0, 3).toUpperCase()}</span>
+            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex flex-col items-center justify-center shadow-inner border border-slate-100 group-hover:scale-110 transition-transform duration-500 overflow-hidden">
+              <TeamFlag team={match.awayTeam} size={32} />
+              <span className="text-[10px] font-black text-slate-400 mt-1">{match.awayTeam.substring(0, 3).toUpperCase()}</span>
             </div>
             <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{match.awayTeam}</p>
           </div>
@@ -3453,7 +3455,17 @@ const AdminMatchCard: React.FC<{
                 Bewerk details
               </button>
             </p>
-            <p className="font-bold text-lg">{match.homeTeam} vs {match.awayTeam}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <TeamFlag team={match.homeTeam} size={20} />
+                <span className="font-bold text-lg">{match.homeTeam}</span>
+              </div>
+              <span className="text-stone-400 font-bold">vs</span>
+              <div className="flex items-center gap-2">
+                <TeamFlag team={match.awayTeam} size={20} />
+                <span className="font-bold text-lg">{match.awayTeam}</span>
+              </div>
+            </div>
             <div className="flex items-center gap-3 mt-1">
               <p className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", match.status === 'finished' ? "bg-delijn-yellow text-delijn-black" : "bg-amber-100 text-amber-700")}>
                 {match.status === 'finished' ? 'Afgelopen' : 'Gepland'}
