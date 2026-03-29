@@ -2634,10 +2634,25 @@ function AdminView({
     e.preventDefault();
     setSaving(true);
     try {
+      if (!homeTeam || !awayTeam || !date) {
+        setError('Fout bij toevoegen match: Vul alle verplichte velden in (teams en datum).');
+        setTimeout(() => setError(''), 5000);
+        setSaving(false);
+        return;
+      }
+
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        setError('Fout bij toevoegen match: Ongeldige datum/tijd formaat.');
+        setTimeout(() => setError(''), 5000);
+        setSaving(false);
+        return;
+      }
+
       const matchData = {
         homeTeam,
         awayTeam,
-        date: new Date(date).toISOString(),
+        date: parsedDate.toISOString(),
         status: 'scheduled' as const,
         type: matchType,
         group: matchType === 'group' ? group : undefined,
