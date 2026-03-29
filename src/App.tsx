@@ -2340,7 +2340,7 @@ function TeamFlag({ team, size = 24 }: { team: string; size?: number }) {
     'N.t.b.': 'un'
   };
 
-  const code = flagMap[team] || 'un';
+  const code = flagMap[team.trim()] || flagMap[Object.keys(flagMap).find(k => k.toLowerCase() === team.trim().toLowerCase()) || ''] || 'un';
   
   if (code === 'un') {
     return <ShieldCheck size={size} className="text-slate-300" />;
@@ -2375,21 +2375,28 @@ function calculateStandings(matches: Match[]): Record<string, TeamStanding[]> {
   matches.forEach(match => {
     if (match.type !== 'group' || !match.group) return;
     
-    if (!groups[match.group]) groups[match.group] = {};
-    if (!groups[match.group][match.homeTeam]) {
-      groups[match.group][match.homeTeam] = { team: match.homeTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    const homeTeam = match.homeTeam.trim();
+    const awayTeam = match.awayTeam.trim();
+    const groupName = match.group.trim();
+    
+    const homeKey = homeTeam.toLowerCase();
+    const awayKey = awayTeam.toLowerCase();
+    
+    if (!groups[groupName]) groups[groupName] = {};
+    if (!groups[groupName][homeKey]) {
+      groups[groupName][homeKey] = { team: homeTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
     }
-    if (!groups[match.group][match.awayTeam]) {
-      groups[match.group][match.awayTeam] = { team: match.awayTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    if (!groups[groupName][awayKey]) {
+      groups[groupName][awayKey] = { team: awayTeam, played: 0, won: 0, draw: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
     }
 
     if (match.status !== 'finished') return;
 
-    const { homeTeam, awayTeam, homeScore, awayScore } = match;
+    const { homeScore, awayScore } = match;
     if (homeScore === undefined || awayScore === undefined) return;
 
-    const home = groups[match.group][homeTeam];
-    const away = groups[match.group][awayTeam];
+    const home = groups[groupName][homeKey];
+    const away = groups[groupName][awayKey];
 
     home.played++;
     away.played++;
@@ -2650,12 +2657,12 @@ function AdminView({
       }
 
       const matchData = {
-        homeTeam,
-        awayTeam,
+        homeTeam: homeTeam.trim(),
+        awayTeam: awayTeam.trim(),
         date: parsedDate.toISOString(),
         status: 'scheduled' as const,
         type: matchType,
-        group: matchType === 'group' ? group : null,
+        group: matchType === 'group' ? group.trim() : null,
       };
       const docRef = doc(collection(db, 'matches'));
       await setDoc(docRef, { id: docRef.id, ...matchData });
