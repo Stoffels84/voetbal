@@ -2652,8 +2652,10 @@ function AdminView({
       setGroup('');
       setSuccess('Match succesvol toegevoegd!');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'matches');
+    } catch (err) {
+      console.error(err);
+      setError('Fout bij toevoegen match. Controleer of alle velden correct zijn ingevuld.');
+      setTimeout(() => setError(''), 5000);
     } finally {
       setSaving(false);
     }
@@ -2723,8 +2725,12 @@ function AdminView({
       await batch.commit();
       setSuccess('Uitslag opgeslagen en punten berekend!');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'batch-update-results');
+    } catch (err) {
+      console.error(err);
+      setError('Fout bij opslaan uitslag.');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -2762,8 +2768,10 @@ function AdminView({
           await batch.commit();
           setSuccess('Het klassement is volledig gereset!');
           setTimeout(() => setSuccess(''), 3000);
-        } catch (error) {
-          handleFirestoreError(error, OperationType.WRITE, 'reset-leaderboard');
+        } catch (err) {
+          console.error(err);
+          setError('Fout bij resetten klassement.');
+          setTimeout(() => setError(''), 5000);
         } finally {
           setSaving(false);
         }
@@ -2819,8 +2827,10 @@ function AdminView({
           await batch.commit();
           setSuccess('Alle scores zijn opnieuw berekend!');
           setTimeout(() => setSuccess(''), 3000);
-        } catch (error) {
-          handleFirestoreError(error, OperationType.WRITE, 'recalculate-all');
+        } catch (err) {
+          console.error(err);
+          setError('Fout bij herberekenen scores.');
+          setTimeout(() => setError(''), 5000);
         } finally {
           setSaving(false);
         }

@@ -143,7 +143,7 @@ service cloud.firestore {
     }
 
     function isValidMatch(data) {
-      return hasOnlyAllowedFields(['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'matchNumber']) &&
+      return hasOnlyAllowedFields(['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber']) &&
         data.id is string &&
         data.homeTeam is string && data.homeTeam.size() > 0 &&
         data.awayTeam is string && data.awayTeam.size() > 0 &&
@@ -151,6 +151,7 @@ service cloud.firestore {
         data.status in ['scheduled', 'finished'] &&
         (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
         (!('type' in data) || data.type in ['group', 'round_of_16', 'quarter_final', 'semi_final', 'final']) &&
+        (!('group' in data) || data.group is string) &&
         (!('matchNumber' in data) || data.matchNumber is number);
     }
 
