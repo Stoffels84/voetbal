@@ -151,7 +151,7 @@ service cloud.firestore {
         data.status in ['scheduled', 'finished'] &&
         (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
         (!('type' in data) || data.type in ['group', 'round_of_16', 'quarter_final', 'semi_final', 'final']) &&
-        (!('group' in data) || data.group is string) &&
+        (!('group' in data) || data.group == null || data.group is string) &&
         (!('matchNumber' in data) || data.matchNumber is number);
     }
 
