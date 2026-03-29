@@ -143,16 +143,19 @@ service cloud.firestore {
     }
 
     function isValidMatch(data) {
-      return hasOnlyAllowedFields(['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber']) &&
+      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber'];
+      return data.keys().hasOnly(allowedFields) &&
         data.id is string &&
         data.homeTeam is string && data.homeTeam.size() > 0 &&
         data.awayTeam is string && data.awayTeam.size() > 0 &&
         data.date is string &&
         data.status in ['scheduled', 'finished'] &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
-        (!('type' in data) || data.type in ['group', 'round_of_16', 'quarter_final', 'semi_final', 'final']) &&
+        (!('type' in data) || data.type is string) &&
         (!('group' in data) || data.group == null || data.group is string) &&
-        (!('matchNumber' in data) || data.matchNumber is number);
+        (!('matchNumber' in data) || data.matchNumber is number) &&
+        (!('homeScore' in data) || data.homeScore is number) &&
+        (!('awayScore' in data) || data.awayScore is number) &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number);
     }
 
     function isValidLeague(data) {

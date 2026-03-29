@@ -2654,7 +2654,8 @@ function AdminView({
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error(err);
-      setError('Fout bij toevoegen match. Controleer of alle velden correct zijn ingevuld.');
+      const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
+      setError(`Fout bij toevoegen match: ${errorMessage}`);
       setTimeout(() => setError(''), 5000);
     } finally {
       setSaving(false);
