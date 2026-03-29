@@ -2655,7 +2655,7 @@ function AdminView({
         date: parsedDate.toISOString(),
         status: 'scheduled' as const,
         type: matchType,
-        group: matchType === 'group' ? group : undefined,
+        group: matchType === 'group' ? group : null,
       };
       const docRef = doc(collection(db, 'matches'));
       await setDoc(docRef, { id: docRef.id, ...matchData });
