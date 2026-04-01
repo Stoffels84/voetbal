@@ -24,7 +24,8 @@ export interface Match {
   date: string;
   homeScore?: number;
   awayScore?: number;
-  firstGoalMinute?: number;
+  allowPenalties?: boolean;
+  penaltyWinner?: 'home' | 'away';
   status: 'scheduled' | 'finished';
   type?: 'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
   group?: string;
@@ -37,7 +38,7 @@ export interface Prediction {
   matchId: string;
   homeScore: number;
   awayScore: number;
-  firstGoalMinute?: number;
+  penaltyWinner?: 'home' | 'away';
   pointsEarned?: number;
 }
 

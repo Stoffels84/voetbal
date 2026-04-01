@@ -1542,8 +1542,9 @@ function PredictionsView({
               </div>
               <h3 className="text-xl font-black text-white uppercase tracking-tight">Puntentelling</h3>
             </div>
-            <p className="text-white/60 text-sm font-bold leading-relaxed max-w-md">
-              Voorspel de scores en beklim het klassement! Punten worden als volgt verdeeld:
+            <p className="text-white/60 text-xs font-bold leading-relaxed max-w-md">
+              Voorspel de scores en beklim het klassement! <br/>
+              <span className="text-theme-primary/90">Knock-out fase:</span> Bij een gelijkspel krijg je enkel punten (1 of 3) als je de juiste penalty-winnaar voorspelt. Foute winnaar = 0 ptn.
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
@@ -1660,7 +1661,7 @@ const MatchCard: React.FC<{
 }> = ({ match, prediction, userId, readonly, allPredictions = [], isAdmin }) => {
   const [homeScore, setHomeScore] = useState(prediction?.homeScore?.toString() || '');
   const [awayScore, setAwayScore] = useState(prediction?.awayScore?.toString() || '');
-  const [firstGoalMinute, setFirstGoalMinute] = useState(prediction?.firstGoalMinute?.toString() || '');
+  const [penaltyWinner, setPenaltyWinner] = useState<'home' | 'away' | undefined>(prediction?.penaltyWinner);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1669,7 +1670,7 @@ const MatchCard: React.FC<{
   const lastSavedValues = useRef({
     home: prediction?.homeScore?.toString() || '',
     away: prediction?.awayScore?.toString() || '',
-    minute: prediction?.firstGoalMinute?.toString() || ''
+    penaltyWinner: prediction?.penaltyWinner
   });
 
   // Track if we've received the first data for this match
@@ -1681,15 +1682,15 @@ const MatchCard: React.FC<{
       hasLoaded.current = true;
       const propHome = prediction.homeScore?.toString() || '';
       const propAway = prediction.awayScore?.toString() || '';
-      const propMinute = prediction.firstGoalMinute?.toString() || '';
+      const propPenalty = prediction.penaltyWinner;
       
       // Only sync if the server data is DIFFERENT from what we last saved
       // AND we are not currently saving
-      if (!saving && (propHome !== lastSavedValues.current.home || propAway !== lastSavedValues.current.away || propMinute !== lastSavedValues.current.minute)) {
+      if (!saving && (propHome !== lastSavedValues.current.home || propAway !== lastSavedValues.current.away || propPenalty !== lastSavedValues.current.penaltyWinner)) {
         setHomeScore(propHome);
         setAwayScore(propAway);
-        setFirstGoalMinute(propMinute);
-        lastSavedValues.current = { home: propHome, away: propAway, minute: propMinute };
+        setPenaltyWinner(propPenalty);
+        lastSavedValues.current = { home: propHome, away: propAway, penaltyWinner: propPenalty };
       }
     } else if (!prediction && !saving && !showSuccess) {
       // If prediction is removed or doesn't exist, and we're not saving,
@@ -1697,8 +1698,8 @@ const MatchCard: React.FC<{
       if (hasLoaded.current && (lastSavedValues.current.home !== '' || lastSavedValues.current.away !== '')) {
         setHomeScore('');
         setAwayScore('');
-        setFirstGoalMinute('');
-        lastSavedValues.current = { home: '', away: '', minute: '' };
+        setPenaltyWinner(undefined);
+        lastSavedValues.current = { home: '', away: '', penaltyWinner: undefined };
       }
     }
   }, [prediction, saving, showSuccess]);
@@ -1731,14 +1732,14 @@ const MatchCard: React.FC<{
         matchId: match.id,
         homeScore: parseInt(homeScore),
         awayScore: parseInt(awayScore),
-        firstGoalMinute: firstGoalMinute !== '' ? parseInt(firstGoalMinute) : null,
+        penaltyWinner: (homeScore === awayScore && match.allowPenalties) ? penaltyWinner : null,
       };
 
       if (prediction) {
         await updateDoc(doc(db, 'predictions', prediction.id), {
           homeScore: predData.homeScore,
           awayScore: predData.awayScore,
-          firstGoalMinute: predData.firstGoalMinute,
+          penaltyWinner: predData.penaltyWinner,
         });
       } else {
         const newPredRef = doc(collection(db, 'predictions'));
@@ -1749,7 +1750,7 @@ const MatchCard: React.FC<{
       }
       
       // Update last saved values immediately for optimistic feel
-      lastSavedValues.current = { home: homeScore, away: awayScore, minute: firstGoalMinute };
+      lastSavedValues.current = { home: homeScore, away: awayScore, penaltyWinner: predData.penaltyWinner || undefined };
       hasLoaded.current = true;
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
@@ -1765,7 +1766,7 @@ const MatchCard: React.FC<{
   const isSaved = prediction && 
     prediction.homeScore.toString() === homeScore && 
     prediction.awayScore.toString() === awayScore &&
-    (prediction.firstGoalMinute?.toString() || '') === firstGoalMinute;
+    (prediction.penaltyWinner === ((homeScore === awayScore && match.allowPenalties) ? penaltyWinner : null));
 
   return (
     <motion.div 
@@ -1809,66 +1810,94 @@ const MatchCard: React.FC<{
             )}
             <div className="flex items-center gap-3">
               {match.status === 'finished' ? (
-                <div className="flex items-center gap-4 text-4xl font-black font-display text-slate-900 tracking-tighter">
-                  <span>{match.homeScore}</span>
-                  <span className="text-slate-200 text-2xl">:</span>
-                  <span>{match.awayScore}</span>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-4 text-4xl font-black font-display text-slate-900 tracking-tighter">
+                    <span>{match.homeScore}</span>
+                    <span className="text-slate-200 text-2xl">:</span>
+                    <span>{match.awayScore}</span>
+                  </div>
+                  {match.homeScore === match.awayScore && match.allowPenalties && match.penaltyWinner && (
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Penalty Winnaar</span>
+                      <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full">
+                        <TeamFlag team={match.penaltyWinner === 'home' ? match.homeTeam : match.awayTeam} size={12} />
+                        <span className="text-[10px] font-black text-slate-900 uppercase">
+                          {match.penaltyWinner === 'home' ? match.homeTeam : match.awayTeam}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number" 
-                    min="0"
-                    value={homeScore}
-                    onChange={(e) => setHomeScore(e.target.value)}
-                    disabled={readonly || saving || isLocked}
-                    className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
-                    placeholder="-"
-                  />
-                  <span className="text-slate-200 font-black text-2xl">:</span>
-                  <input 
-                    type="number" 
-                    min="0"
-                    value={awayScore}
-                    onChange={(e) => setAwayScore(e.target.value)}
-                    disabled={readonly || saving || isLocked}
-                    className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
-                    placeholder="-"
-                  />
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={homeScore}
+                      onChange={(e) => setHomeScore(e.target.value)}
+                      disabled={readonly || saving || isLocked}
+                      className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
+                      placeholder="-"
+                    />
+                    <span className="text-slate-200 font-black text-2xl">:</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={awayScore}
+                      onChange={(e) => setAwayScore(e.target.value)}
+                      disabled={readonly || saving || isLocked}
+                      className="w-16 h-16 text-center glass-input rounded-[1.5rem] text-2xl font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
+                      placeholder="-"
+                    />
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col items-center gap-2 mt-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Eerste Doelpunt (Minuut)</p>
-              {match.status === 'finished' ? (
-                <div className="flex flex-col items-center">
-                  <div className="bg-slate-900 text-white w-12 h-12 rounded-xl flex items-center justify-center font-black font-display">
-                    {match.firstGoalMinute ?? '-'}
-                  </div>
-                  {prediction?.firstGoalMinute === match.firstGoalMinute && match.firstGoalMinute !== undefined && match.firstGoalMinute !== null && (
-                    <span className="text-[8px] font-black text-theme-primary uppercase mt-1">Exact! (+2)</span>
-                  )}
-                </div>
-              ) : (
-                <input 
-                  type="number" 
-                  min="0"
-                  max="120"
-                  value={firstGoalMinute}
-                  onChange={(e) => setFirstGoalMinute(e.target.value)}
-                  disabled={readonly || saving || isLocked}
-                  className="w-16 h-10 text-center glass-input rounded-xl text-lg font-black font-display text-slate-900 focus:ring-4 focus:ring-theme-primary/10 outline-none transition-all disabled:opacity-50"
-                  placeholder="-"
-                />
-              )}
-            </div>
-            
             {!readonly && (
-              <div className="w-full space-y-2">
+              <div className="w-full space-y-4">
+                {match.allowPenalties && (
+                  <div className="flex flex-col items-center gap-2 animate-in fade-in slide-in-from-top-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Wie gaat er door bij penalty's</span>
+                      {homeScore !== '' && awayScore !== '' && parseInt(homeScore) !== parseInt(awayScore) && (
+                        <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">(Enkel bij gelijkspel)</span>
+                      )}
+                    </div>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setPenaltyWinner('home')}
+                        disabled={readonly || saving || isLocked}
+                        className={cn(
+                          "px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+                          penaltyWinner === 'home' 
+                            ? "bg-slate-900 text-white shadow-lg shadow-slate-200" 
+                            : "bg-slate-100 text-slate-400 hover:bg-slate-200",
+                          homeScore !== '' && awayScore !== '' && parseInt(homeScore) !== parseInt(awayScore) && "opacity-50"
+                        )}
+                      >
+                        {match.homeTeam}
+                      </button>
+                      <button 
+                        onClick={() => setPenaltyWinner('away')}
+                        disabled={readonly || saving || isLocked}
+                        className={cn(
+                          "px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+                          penaltyWinner === 'away' 
+                            ? "bg-slate-900 text-white shadow-lg shadow-slate-200" 
+                            : "bg-slate-100 text-slate-400 hover:bg-slate-200",
+                          homeScore !== '' && awayScore !== '' && parseInt(homeScore) !== parseInt(awayScore) && "opacity-50"
+                        )}
+                      >
+                        {match.awayTeam}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <button 
                   onClick={handleSave}
-                  disabled={saving || (isSaved && !showSuccess) || homeScore === '' || awayScore === '' || isLocked}
+                  disabled={saving || (isSaved && !showSuccess) || homeScore === '' || awayScore === '' || (homeScore !== '' && awayScore !== '' && parseInt(homeScore) === parseInt(awayScore) && match.allowPenalties && !penaltyWinner) || isLocked}
                   className={cn(
                     "w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 shadow-lg",
                     (isSaved || showSuccess)
@@ -2765,7 +2794,7 @@ function AdminView({
     }
   };
 
-  const handleUpdateResult = async (match: Match, home: number, away: number, fgm?: number) => {
+  const handleUpdateResult = async (match: Match, home: number, away: number, penaltyWinner?: 'home' | 'away') => {
     try {
       const batch = writeBatch(db);
       
@@ -2774,7 +2803,7 @@ function AdminView({
       batch.update(matchRef, {
         homeScore: home,
         awayScore: away,
-        firstGoalMinute: fgm ?? null,
+        penaltyWinner: (home === away && match.allowPenalties) ? (penaltyWinner || null) : null,
         status: 'finished'
       });
 
@@ -2787,24 +2816,26 @@ function AdminView({
       predsSnapshot.docs.forEach(predDoc => {
         const pred = predDoc.data() as Prediction;
         let points = 0;
+        const isExactScore = pred.homeScore === home && pred.awayScore === away;
         
-        // Logic: 
-        // Correct score: 3 points
-        // Correct winner/draw: 1 point
-        // Eerste Doelpunt (Exact minute): +2 points
-        
-        const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
-        const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
-
-        if (pred.homeScore === home && pred.awayScore === away) {
-          points = 3;
-        } else if (actualWinner === predWinner) {
-          points = 1;
-        }
-
-        // Golden Goal logic
-        if (fgm !== undefined && fgm !== null && pred.firstGoalMinute === fgm) {
-          points += 2;
+        if (match.allowPenalties && home === away) {
+          // Penalty match and it ended in a draw
+          // Only users who predicted the correct penalty winner get points
+          if (pred.penaltyWinner === penaltyWinner) {
+            points = isExactScore ? 3 : 1;
+          } else {
+            points = 0;
+          }
+        } else {
+          // Normal match or penalty match that didn't end in a draw
+          const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
+          const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
+          
+          if (isExactScore) {
+            points = 3;
+          } else if (actualWinner === predWinner) {
+            points = 1;
+          }
         }
 
         const oldPoints = pred.pointsEarned || 0;
@@ -2905,18 +2936,27 @@ function AdminView({
             
             let points = 0;
             if (match && match.homeScore !== undefined && match.awayScore !== undefined) {
-              const actualWinner = match.homeScore > match.awayScore ? 'home' : match.homeScore < match.awayScore ? 'away' : 'draw';
-              const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
-
-              if (pred.homeScore === match.homeScore && pred.awayScore === match.awayScore) {
-                points = 3;
-              } else if (actualWinner === predWinner) {
-                points = 1;
-              }
-
-              // Golden Goal logic
-              if (match.firstGoalMinute !== undefined && match.firstGoalMinute !== null && pred.firstGoalMinute === match.firstGoalMinute) {
-                points += 2;
+              const home = match.homeScore;
+              const away = match.awayScore;
+              const isExactScore = pred.homeScore === home && pred.awayScore === away;
+              
+              if (match.allowPenalties && home === away) {
+                // Penalty match and it ended in a draw
+                if (pred.penaltyWinner === match.penaltyWinner) {
+                  points = isExactScore ? 3 : 1;
+                } else {
+                  points = 0;
+                }
+              } else {
+                // Normal match or penalty match not drawn
+                const actualWinner = home > away ? 'home' : home < away ? 'away' : 'draw';
+                const predWinner = pred.homeScore > pred.awayScore ? 'home' : pred.homeScore < pred.awayScore ? 'away' : 'draw';
+                
+                if (isExactScore) {
+                  points = 3;
+                } else if (actualWinner === predWinner) {
+                  points = 1;
+                }
               }
             }
             
@@ -2968,8 +3008,7 @@ function AdminView({
           await updateDoc(doc(db, 'matches', matchId), {
             status: 'scheduled',
             homeScore: null,
-            awayScore: null,
-            firstGoalMinute: null
+            awayScore: null
           });
           setSuccess('Match is gereset naar gepland.');
           setTimeout(() => setSuccess(''), 3000);
@@ -3429,7 +3468,7 @@ function AdminView({
 
 const AdminMatchCard: React.FC<{ 
   match: Match; 
-  onUpdate: (m: Match, h: number, a: number, fgm?: number) => void; 
+  onUpdate: (m: Match, h: number, a: number, penaltyWinner?: 'home' | 'away') => void; 
   onFullUpdate: (id: string, data: Partial<Match>) => void;
   onDelete: (id: string) => void;
   onReset: (id: string) => void;
@@ -3437,7 +3476,7 @@ const AdminMatchCard: React.FC<{
 }> = ({ match, onUpdate, onFullUpdate, onDelete, onReset, saving }) => {
   const [h, setH] = useState(match.homeScore?.toString() || '');
   const [a, setA] = useState(match.awayScore?.toString() || '');
-  const [fgm, setFgm] = useState(match.firstGoalMinute?.toString() || '');
+  const [penaltyWinner, setPenaltyWinner] = useState<'home' | 'away' | undefined>(match.penaltyWinner);
   const [updating, setUpdating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -3445,12 +3484,13 @@ const AdminMatchCard: React.FC<{
   const [editHome, setEditHome] = useState(match.homeTeam);
   const [editAway, setEditAway] = useState(match.awayTeam);
   const [editDate, setEditDate] = useState(new Date(match.date).toISOString().slice(0, 16));
+  const [editAllowPenalties, setEditAllowPenalties] = useState(match.allowPenalties || false);
 
   const handleUpdate = async () => {
     if (h === '' || a === '') return;
     setUpdating(true);
     try {
-      await onUpdate(match, parseInt(h), parseInt(a), fgm !== '' ? parseInt(fgm) : undefined);
+      await onUpdate(match, parseInt(h), parseInt(a), (h === a && match.allowPenalties) ? penaltyWinner : undefined);
     } finally {
       setUpdating(false);
     }
@@ -3462,7 +3502,8 @@ const AdminMatchCard: React.FC<{
       await onFullUpdate(match.id, {
         homeTeam: editHome,
         awayTeam: editAway,
-        date: new Date(editDate).toISOString()
+        date: new Date(editDate).toISOString(),
+        allowPenalties: editAllowPenalties
       });
       setIsEditing(false);
     } finally {
@@ -3503,6 +3544,16 @@ const AdminMatchCard: React.FC<{
               onChange={e => setEditDate(e.target.value)}
               className="w-full bg-stone-50 border border-stone-200 p-2 rounded-lg text-xs font-bold"
             />
+            <div className="flex items-center gap-2 px-1">
+              <input 
+                type="checkbox"
+                id={`penalties-${match.id}`}
+                checked={editAllowPenalties}
+                onChange={e => setEditAllowPenalties(e.target.checked)}
+                className="w-4 h-4 rounded border-stone-300 text-delijn-black focus:ring-delijn-yellow"
+              />
+              <label htmlFor={`penalties-${match.id}`} className="text-[10px] font-bold text-stone-600 uppercase">Strafschoppen mogelijk</label>
+            </div>
             <div className="flex gap-2">
               <button 
                 onClick={handleSaveEdit}
@@ -3584,23 +3635,40 @@ const AdminMatchCard: React.FC<{
               placeholder="A"
             />
           </div>
+          {match.allowPenalties && (
+            <div className="flex flex-col items-center gap-1 mt-2">
+              <label className="text-[8px] font-bold text-stone-400 uppercase">
+                Wie gaat er door bij penalty's {h !== '' && a !== '' && parseInt(h) !== parseInt(a) && "(Enkel bij gelijkspel)"}
+              </label>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setPenaltyWinner('home')}
+                  className={cn(
+                    "px-2 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                    penaltyWinner === 'home' ? "bg-delijn-black text-white" : "bg-stone-100 text-stone-400",
+                    h !== '' && a !== '' && parseInt(h) !== parseInt(a) && "opacity-50"
+                  )}
+                >
+                  {match.homeTeam}
+                </button>
+                <button 
+                  onClick={() => setPenaltyWinner('away')}
+                  className={cn(
+                    "px-2 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                    penaltyWinner === 'away' ? "bg-delijn-black text-white" : "bg-stone-100 text-stone-400",
+                    h !== '' && a !== '' && parseInt(h) !== parseInt(a) && "opacity-50"
+                  )}
+                >
+                  {match.awayTeam}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col items-center gap-1">
-          <label className="text-[8px] font-bold text-stone-400 uppercase">Eerste Doelpunt</label>
-          <input 
-            type="number" 
-            value={fgm} 
-            disabled={isBusy}
-            onChange={e => setFgm(e.target.value)}
-            className="w-16 h-10 text-center bg-stone-50 border border-stone-200 rounded-xl font-bold focus:ring-2 focus:ring-delijn-yellow outline-none disabled:opacity-50"
-            placeholder="Min"
-          />
-        </div>
-        
         <button 
           onClick={handleUpdate}
-          disabled={isBusy || h === '' || a === ''}
+          disabled={isBusy || h === '' || a === '' || (h !== '' && a !== '' && parseInt(h) === parseInt(a) && match.allowPenalties && !penaltyWinner)}
           className="bg-delijn-black text-white px-4 py-2 rounded-xl font-bold hover:bg-stone-800 disabled:opacity-50"
         >
           {updating ? '...' : 'Uitslag'}

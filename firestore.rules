@@ -98,7 +98,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((request.auth.token.email == "christoffrotty84@gmail.com") ||
+        ((request.auth.token.email == "christoffrotty84@gmail.com" && request.auth.token.email_verified == true) ||
          (request.auth.token.email == "29076@delijn.be") ||
          (request.auth.token.email == "christoff.rotty@icloud.com") ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -143,7 +143,7 @@ service cloud.firestore {
     }
 
     function isValidMatch(data) {
-      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber'];
+      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber', 'allowPenalties', 'penaltyWinner'];
       return data.keys().hasOnly(allowedFields) &&
         data.id is string &&
         data.homeTeam is string && data.homeTeam.size() > 0 &&
@@ -153,9 +153,11 @@ service cloud.firestore {
         (!('type' in data) || data.type is string) &&
         (!('group' in data) || data.group == null || data.group is string) &&
         (!('matchNumber' in data) || data.matchNumber is number) &&
-        (!('homeScore' in data) || data.homeScore is number) &&
-        (!('awayScore' in data) || data.awayScore is number) &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number);
+        (!('homeScore' in data) || data.homeScore == null || data.homeScore is number) &&
+        (!('awayScore' in data) || data.awayScore == null || data.awayScore is number) &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
+        (!('allowPenalties' in data) || data.allowPenalties is bool) &&
+        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']);
     }
 
     function isValidLeague(data) {
@@ -175,14 +177,15 @@ service cloud.firestore {
     }
 
     function isValidPrediction(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'firstGoalMinute', 'pointsEarned']) &&
+      return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'firstGoalMinute', 'pointsEarned', 'penaltyWinner']) &&
         data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
         data.matchId is string &&
         data.homeScore is number && data.homeScore >= 0 &&
         data.awayScore is number && data.awayScore >= 0 &&
         (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
         (!('id' in data) || data.id is string) &&
-        (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number);
+        (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number) &&
+        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']);
     }
 
     function isValidBonusQuestion(data) {

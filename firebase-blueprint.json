@@ -58,7 +58,8 @@
         "date": { "type": "string", "format": "date-time", "description": "Date and time of the match" },
         "homeScore": { "type": "number", "description": "Actual home team score (null if not played)" },
         "awayScore": { "type": "number", "description": "Actual away team score (null if not played)" },
-        "firstGoalMinute": { "type": "number", "description": "Minute of the first goal (null if no goals)" },
+        "allowPenalties": { "type": "boolean", "description": "Whether the match can go to penalties" },
+        "penaltyWinner": { "type": "string", "enum": ["home", "away"], "description": "The winner of the penalty shootout if applicable" },
         "status": { "type": "string", "enum": ["scheduled", "finished"], "description": "Current status of the match" },
         "type": { "type": "string", "enum": ["group", "round_of_16", "quarter_final", "semi_final", "final"], "description": "Type of match for bracket" },
         "matchNumber": { "type": "number", "description": "Number for bracket positioning" }
@@ -75,7 +76,7 @@
         "matchId": { "type": "string", "description": "ID of the match being predicted" },
         "homeScore": { "type": "number", "description": "Predicted home team score" },
         "awayScore": { "type": "number", "description": "Predicted away team score" },
-        "firstGoalMinute": { "type": "number", "description": "Predicted minute of the first goal" },
+        "penaltyWinner": { "type": "string", "enum": ["home", "away"], "description": "Predicted winner of the penalty shootout" },
         "pointsEarned": { "type": "number", "description": "Points earned for this prediction (calculated after match)" }
       },
       "required": ["id", "userId", "matchId", "homeScore", "awayScore"]
