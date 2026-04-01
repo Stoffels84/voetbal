@@ -22,6 +22,7 @@ service cloud.firestore {
     //   - favoriteTeam: string (optional)
     //   - avatarUrl: string (optional)
     //   - previousRank: number (optional)
+    //   - lastOnline: timestamp (optional)
     //
     // Collection: matches
     // Document ID: matchId
@@ -129,7 +130,7 @@ service cloud.firestore {
     }
 
     function isValidProfile(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank', 'rankHistory', 'topScorer', 'stats']) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank', 'rankHistory', 'topScorer', 'stats', 'lastOnline']) &&
         data.uid is string && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
         (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
@@ -139,7 +140,8 @@ service cloud.firestore {
         (!('previousRank' in data) || data.previousRank is number) &&
         (!('rankHistory' in data) || data.rankHistory is list) &&
         (!('topScorer' in data) || data.topScorer is string) &&
-        (!('stats' in data) || data.stats is map);
+        (!('stats' in data) || data.stats is map) &&
+        (!('lastOnline' in data) || data.lastOnline == null || data.lastOnline is timestamp);
     }
 
     function isValidMatch(data) {
@@ -171,9 +173,10 @@ service cloud.firestore {
     }
 
     function isValidLeagueMember(data) {
-      return hasOnlyAllowedFields(['id', 'leagueId', 'userId', 'joinedAt', 'displayName', 'totalPoints']) &&
+      return hasOnlyAllowedFields(['id', 'leagueId', 'userId', 'joinedAt', 'displayName', 'totalPoints', 'lastOnline']) &&
         data.id is string && data.leagueId is string && data.userId is string && data.userId == request.auth.uid &&
-        data.joinedAt is timestamp && data.displayName is string && data.totalPoints is number;
+        data.joinedAt is timestamp && data.displayName is string && data.totalPoints is number &&
+        (!('lastOnline' in data) || data.lastOnline == null || data.lastOnline is timestamp);
     }
 
     function isValidPrediction(data) {
