@@ -62,7 +62,10 @@ import {
   Share2,
   PieChart,
   Copy,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  ShieldOff,
+  ShieldAlert
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -869,7 +872,7 @@ function AppContent() {
           if (profileDoc && !profileDoc.exists()) {
             const profileData: UserProfile = {
               uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || 'Anoniem',
+              displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anoniem',
               photoURL: firebaseUser.photoURL || null,
               totalPoints: 0
             };
@@ -1066,6 +1069,17 @@ function AppContent() {
       } else if (isRegistering) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName });
+        
+        // Explicitly create or update the profile with the registration name
+        const profileDocRef = doc(db, 'profiles', userCredential.user.uid);
+        const newProfile: UserProfile = {
+          uid: userCredential.user.uid,
+          displayName: displayName,
+          photoURL: userCredential.user.photoURL || null,
+          totalPoints: 0
+        };
+        await setDoc(profileDocRef, newProfile, { merge: true });
+        setProfile(newProfile);
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -2447,6 +2461,12 @@ function TeamFlag({ team, size = 24 }: { team: string; size?: number }) {
     'Oezbekistan': 'uz',
     'Australië': 'au',
     'Tunesië': 'tn',
+    'Bosnië-Herzegovina': 'ba',
+    'Zweden': 'se',
+    'Irak': 'iq',
+    'Noorwegen': 'no',
+    'Congo DR': 'cd',
+    'DR Congo': 'cd',
     'N.t.b.': 'un'
   };
 
@@ -2687,6 +2707,42 @@ function AdminView({
   // Tournament settings state
   const [officialTopScorer, setOfficialTopScorer] = useState(tournamentSettings?.officialTopScorer || '');
   const [topScorerPoints, setTopScorerPoints] = useState(tournamentSettings?.topScorerPoints || 10);
+  const [usersPrivate, setUsersPrivate] = useState<UserPrivate[]>([]);
+
+  useEffect(() => {
+    if (adminTab === 'users') {
+      const unsubscribe = onSnapshot(
+        collection(db, 'users'),
+        (snapshot) => {
+          setUsersPrivate(snapshot.docs.map(doc => doc.data() as UserPrivate));
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'users')
+      );
+      return () => unsubscribe();
+    }
+  }, [adminTab]);
+
+  const handleToggleAdmin = async (userId: string, currentRole: 'admin' | 'user') => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    
+    // Prevent self-demotion for safety
+    if (userId === auth.currentUser?.uid && newRole === 'user') {
+      setError('Je kunt jezelf niet demoteren als admin.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+      setSuccess(`Gebruiker ${newRole === 'admin' ? 'gepromoveerd tot' : 'gedemoteerd van'} admin!`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'users/' + userId);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (tournamentSettings) {
@@ -3369,27 +3425,52 @@ function AdminView({
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
             <h2 className="text-2xl font-bold mb-6">Gebruikers Beheer</h2>
             <div className="grid gap-4">
-              {leaderboard.map(userProfile => (
-                <div key={userProfile.uid} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl border border-stone-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-white border border-stone-200">
-                      <img src={userProfile.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.displayName}`} alt="" className="w-full h-full object-cover" />
+              {leaderboard.map(userProfile => {
+                const userPrivate = usersPrivate.find(u => u.uid === userProfile.uid);
+                const isAdmin = userPrivate?.role === 'admin';
+                
+                return (
+                  <div key={userProfile.uid} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl border border-stone-100">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-white border border-stone-200">
+                        <img src={userProfile.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.displayName}`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-stone-900">{userProfile.displayName}</p>
+                          {isAdmin && (
+                            <span className="bg-delijn-yellow/20 text-delijn-black text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Admin</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest">{userProfile.totalPoints} Punten</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-stone-900">{userProfile.displayName}</p>
-                      <p className="text-xs text-stone-400 font-bold uppercase tracking-widest">{userProfile.totalPoints} Punten</p>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleToggleAdmin(userProfile.uid, isAdmin ? 'admin' : 'user')}
+                        disabled={saving}
+                        className={cn(
+                          "p-2 rounded-lg transition-colors disabled:opacity-50",
+                          isAdmin 
+                            ? "text-delijn-yellow hover:bg-delijn-yellow/10" 
+                            : "text-stone-400 hover:bg-stone-100"
+                        )}
+                        title={isAdmin ? "Admin rol intrekken" : "Promoveren tot admin"}
+                      >
+                        {isAdmin ? <Shield size={20} /> : <ShieldOff size={20} />}
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteUser(userProfile.uid)}
+                        disabled={saving}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Gebruiker verwijderen"
+                      >
+                        <Trash2 size={20} />
+                      </button>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => handleDeleteUser(userProfile.uid)}
-                    disabled={saving}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                    title="Gebruiker verwijderen"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
