@@ -1763,15 +1763,26 @@ const MatchCard: React.FC<{
         });
       }
       
-      // Update last saved values immediately for optimistic feel
       lastSavedValues.current = { home: homeScore, away: awayScore, penaltyWinner: predData.penaltyWinner || undefined };
       hasLoaded.current = true;
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err: any) {
       console.error('Error saving prediction:', err);
-      setError(err.message || 'Fout bij het opslaan');
-      handleFirestoreError(err, OperationType.WRITE, 'predictions');
+      let displayMessage = 'Fout bij het opslaan';
+      
+      if (err.message && err.message.includes('permission-denied')) {
+        displayMessage = 'Geen toestemming om op te slaan (Firewall/Security Rules)';
+      } else if (err.message) {
+        displayMessage = `Fout: ${err.message}`;
+      }
+      
+      setError(displayMessage);
+      try {
+        handleFirestoreError(err, OperationType.WRITE, 'predictions');
+      } catch (logErr) {
+        // Ignored, just for logging
+      }
     } finally {
       setSaving(false);
     }

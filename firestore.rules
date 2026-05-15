@@ -99,9 +99,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "christoffrotty84@gmail.com" ||
-         request.auth.token.email == "29076@delijn.be" ||
-         request.auth.token.email == "christoff.rotty@icloud.com" ||
+        (request.auth.token.email.toLower() == "christoffrotty84@gmail.com" ||
+         request.auth.token.email.toLower() == "29076@delijn.be" ||
+         request.auth.token.email.toLower() == "christoff.rotty@icloud.com" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
     }
@@ -179,12 +179,12 @@ service cloud.firestore {
     function isValidPrediction(data) {
       return data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
         data.matchId is string &&
-        data.homeScore is number && data.homeScore >= 0 &&
-        data.awayScore is number && data.awayScore >= 0 &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
+        (data.homeScore is number || data.homeScore is string) &&
+        (data.awayScore is number || data.awayScore is string) &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number || data.firstGoalMinute is string) &&
         (!('id' in data) || data.id is string) &&
         (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number) &&
-        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']);
+        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away', '']);
     }
 
     function isValidBonusQuestion(data) {
@@ -268,17 +268,15 @@ service cloud.firestore {
     match /predictions/{predictionId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
-                      isValidPrediction(request.resource.data) && 
-                      predictionId == request.resource.data.id &&
-                      (isAdmin() || isBeforeMatchDeadline(request.resource.data.matchId));
+                      (isAdmin() || (
+                        request.resource.data.userId == request.auth.uid &&
+                        predictionId == request.resource.data.id
+                      ));
       allow update: if isAuthenticated() && 
-                      (
-                        isAdmin() ||
-                        (resource.data.userId == request.auth.uid && 
-                         isValidPrediction(request.resource.data) && 
-                         isBeforeMatchDeadline(resource.data.matchId) &&
-                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pointsEarned', 'userId', 'matchId', 'id']))
-                      );
+                      (isAdmin() || (
+                        resource.data.userId == request.auth.uid && 
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'matchId', 'id'])
+                      ));
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
