@@ -1718,7 +1718,7 @@ const MatchCard: React.FC<{
     }
   }, [prediction, saving, showSuccess]);
 
-  const isLocked = new Date().getTime() > new Date(match.date).getTime() - (60 * 60 * 1000);
+  const isLocked = !isAdmin && new Date().getTime() > new Date(match.date).getTime();
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
   const totalPredictions = matchPredictions.length;

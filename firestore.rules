@@ -99,11 +99,11 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((request.auth.token.email == "christoffrotty84@gmail.com" && request.auth.token.email_verified == true) ||
-         (request.auth.token.email == "29076@delijn.be") ||
-         (request.auth.token.email == "christoff.rotty@icloud.com") ||
+        (request.auth.token.email == "christoffrotty84@gmail.com" ||
+         request.auth.token.email == "29076@delijn.be" ||
+         request.auth.token.email == "christoff.rotty@icloud.com" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -130,8 +130,7 @@ service cloud.firestore {
     }
 
     function isValidProfile(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalPoints', 'favoriteTeam', 'avatarUrl', 'previousRank', 'rankHistory', 'topScorer', 'stats', 'lastOnline']) &&
-        data.uid is string && data.uid == request.auth.uid &&
+      return data.uid is string && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
         (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
         data.totalPoints is number &&
@@ -163,8 +162,7 @@ service cloud.firestore {
     }
 
     function isValidLeague(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'description', 'createdBy', 'inviteCode', 'createdAt', 'memberCount']) &&
-        data.id is string && data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+      return data.id is string && data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
         (!('description' in data) || data.description is string) &&
         data.createdBy is string && data.createdBy == request.auth.uid &&
         data.inviteCode is string && data.inviteCode.size() > 0 &&
@@ -173,15 +171,13 @@ service cloud.firestore {
     }
 
     function isValidLeagueMember(data) {
-      return hasOnlyAllowedFields(['id', 'leagueId', 'userId', 'joinedAt', 'displayName', 'totalPoints', 'lastOnline']) &&
-        data.id is string && data.leagueId is string && data.userId is string && data.userId == request.auth.uid &&
+      return data.id is string && data.leagueId is string && data.userId is string && data.userId == request.auth.uid &&
         data.joinedAt is timestamp && data.displayName is string && data.totalPoints is number &&
         (!('lastOnline' in data) || data.lastOnline == null || data.lastOnline is timestamp);
     }
 
     function isValidPrediction(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'matchId', 'homeScore', 'awayScore', 'firstGoalMinute', 'pointsEarned', 'penaltyWinner']) &&
-        data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
+      return data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
         data.matchId is string &&
         data.homeScore is number && data.homeScore >= 0 &&
         data.awayScore is number && data.awayScore >= 0 &&
@@ -192,24 +188,21 @@ service cloud.firestore {
     }
 
     function isValidBonusQuestion(data) {
-      return hasOnlyAllowedFields(['id', 'question', 'points', 'options', 'correctAnswer', 'deadline', 'status']) &&
-        data.question is string && data.question.size() > 0 &&
+      return data.question is string && data.question.size() > 0 &&
         data.points is number && data.points >= 0 &&
         data.deadline is string &&
         data.status in ['open', 'closed', 'finished'];
     }
 
     function isValidBonusAnswer(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'questionId', 'answer', 'pointsEarned']) &&
-        data.userId is string && data.userId == request.auth.uid &&
+      return data.userId is string && data.userId == request.auth.uid &&
         data.questionId is string &&
         data.answer is string && data.answer.size() > 0 &&
         (!('pointsEarned' in data) || data.pointsEarned is number);
     }
 
     function isValidMessage(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'userName', 'text', 'timestamp', 'avatarUrl']) &&
-        data.userId is string && data.userId == request.auth.uid &&
+      return data.userId is string && data.userId == request.auth.uid &&
         data.userName is string && data.userName.size() > 0 &&
         data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
         data.timestamp is timestamp &&
@@ -217,20 +210,17 @@ service cloud.firestore {
     }
 
     function isValidPoll(data) {
-      return hasOnlyAllowedFields(['id', 'question', 'options', 'status', 'createdAt']) &&
-        data.id is string && data.question is string && data.options is list &&
+      return data.id is string && data.question is string && data.options is list &&
         data.status in ['open', 'closed'] && data.createdAt is timestamp;
     }
 
     function isValidPollVote(data) {
-      return hasOnlyAllowedFields(['userId', 'pollId', 'optionIndex']) &&
-        data.userId is string && data.userId == request.auth.uid &&
+      return data.userId is string && data.userId == request.auth.uid &&
         data.pollId is string && data.optionIndex is number;
     }
 
     function isValidNotification(data) {
-      return hasOnlyAllowedFields(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
-        data.userId is string && data.userId == request.auth.uid &&
+      return data.userId is string && data.userId == request.auth.uid &&
         data.title is string && data.message is string &&
         data.type in ['info', 'success', 'warning'] &&
         data.read is bool && data.createdAt is timestamp;
@@ -270,7 +260,9 @@ service cloud.firestore {
 
     function isBeforeMatchDeadline(matchId) {
       let matchPath = /databases/$(database)/documents/matches/$(matchId);
-      return exists(matchPath) && request.time < timestamp(get(matchPath).data.date) - duration.value(1, 'h');
+      return exists(matchPath) && 
+             get(matchPath).data.get('date', '') != '' &&
+             request.time < timestamp(get(matchPath).data.date);
     }
 
     match /predictions/{predictionId} {
@@ -278,10 +270,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                       isValidPrediction(request.resource.data) && 
                       predictionId == request.resource.data.id &&
-                      isBeforeMatchDeadline(request.resource.data.matchId);
+                      (isAdmin() || isBeforeMatchDeadline(request.resource.data.matchId));
       allow update: if isAuthenticated() && 
                       (
-                        (isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['homeScore', 'awayScore', 'penaltyWinner', 'userId', 'matchId', 'id'])) ||
+                        isAdmin() ||
                         (resource.data.userId == request.auth.uid && 
                          isValidPrediction(request.resource.data) && 
                          isBeforeMatchDeadline(resource.data.matchId) &&
