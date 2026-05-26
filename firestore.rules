@@ -264,7 +264,15 @@ service cloud.firestore {
              'date' in get(matchPath).data &&
              get(matchPath).data.date is string &&
              get(matchPath).data.date.size() >= 16 &&
-             request.time < timestamp(get(matchPath).data.date[0:16] + ":00Z");
+             (
+               // Safe native parse: check for valid ISO format with T and timezone first
+               (get(matchPath).data.date.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*(Z|[+-]\\d{2}:\\d{2})$") && 
+                request.time < timestamp(get(matchPath).data.date)) ||
+               
+               // Robust fallback: reconstruct with 'T' and UTC 'Z' if it has space or missing offset
+               (get(matchPath).data.date.matches("^\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}.*$") && 
+                request.time < timestamp(get(matchPath).data.date[0:10] + "T" + get(matchPath).data.date[11:16] + ":00Z"))
+             );
     }
 
     match /predictions/{predictionId} {
