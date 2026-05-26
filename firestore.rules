@@ -99,9 +99,11 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.get('email', '').lower() == "christoffrotty84@gmail.com" ||
-         request.auth.token.get('email', '').lower() == "29076@delijn.be" ||
-         request.auth.token.get('email', '').lower() == "christoff.rotty@icloud.com" ||
+        (('email' in request.auth.token && (
+          request.auth.token.email == "christoffrotty84@gmail.com" ||
+          request.auth.token.email == "29076@delijn.be" ||
+          request.auth.token.email == "christoff.rotty@icloud.com"
+         )) ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
     }
@@ -264,15 +266,7 @@ service cloud.firestore {
              'date' in get(matchPath).data &&
              get(matchPath).data.date is string &&
              get(matchPath).data.date.size() >= 16 &&
-             (
-               // Safe native parse: check for valid ISO format with T and timezone first
-               (get(matchPath).data.date.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*(Z|[+-]\\d{2}:\\d{2})$") && 
-                request.time < timestamp(get(matchPath).data.date)) ||
-               
-               // Robust fallback: reconstruct with 'T' and UTC 'Z' if it has space or missing offset
-               (get(matchPath).data.date.matches("^\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}.*$") && 
-                request.time < timestamp(get(matchPath).data.date[0:10] + "T" + get(matchPath).data.date[11:16] + ":00Z"))
-             );
+             request.time < timestamp(get(matchPath).data.date[0:10] + "T" + get(matchPath).data.date[11:16] + ":00Z");
     }
 
     match /predictions/{predictionId} {
