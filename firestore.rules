@@ -260,9 +260,11 @@ service cloud.firestore {
 
     function isBeforeMatchDeadline(matchId) {
       let matchPath = /databases/$(database)/documents/matches/$(matchId);
-      return exists(matchPath) && 
-             get(matchPath).data.get('date', '') != '' &&
-             request.time < timestamp(get(matchPath).data.date);
+      let dateVal = exists(matchPath) ? get(matchPath).data.get('date', '') : '';
+      let isValidDate = dateVal.matches("^\\d{4}-\\d{2}-\\d{2}.*");
+      let hasTimezone = dateVal.matches(".*(Z|[+-]\\d{2}:\\d{2})$");
+      let safeDateStr = hasTimezone ? dateVal : dateVal + 'Z';
+      return dateVal != '' && isValidDate && request.time < timestamp(safeDateStr);
     }
 
     match /predictions/{predictionId} {
