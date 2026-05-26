@@ -944,9 +944,7 @@ function AppContent() {
     );
 
     const predictionsUnsubscribe = onSnapshot(
-      user.role === 'admin' 
-        ? collection(db, 'predictions')
-        : query(collection(db, 'predictions'), where('userId', '==', user.uid)),
+      collection(db, 'predictions'),
       (snapshot) => {
         setPredictions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Prediction)));
       },
@@ -1370,6 +1368,7 @@ function AppContent() {
             predictions={predictions} 
             userId={user.uid} 
             isAdmin={user.role === 'admin'} 
+            profiles={leaderboard}
           />
         )}
         {activeTab === 'standings' && (
@@ -1533,12 +1532,14 @@ function PredictionsView({
   matches, 
   predictions, 
   userId,
-  isAdmin 
+  isAdmin,
+  profiles = []
 }: { 
   matches: Match[]; 
   predictions: Prediction[]; 
   userId: string;
   isAdmin: boolean;
+  profiles?: UserProfile[];
 }) {
   const upcomingMatches = matches.filter(m => m.status === 'scheduled');
   const finishedMatches = matches.filter(m => m.status === 'finished');
@@ -1620,6 +1621,7 @@ function PredictionsView({
                 userId={userId}
                 allPredictions={predictions}
                 isAdmin={isAdmin}
+                profiles={profiles}
               />
             ))}
           </motion.div>
@@ -1656,6 +1658,7 @@ function PredictionsView({
                 readonly
                 allPredictions={predictions}
                 isAdmin={isAdmin}
+                profiles={profiles}
               />
             ))}
           </motion.div>
@@ -1672,13 +1675,15 @@ const MatchCard: React.FC<{
   readonly?: boolean;
   allPredictions?: Prediction[];
   isAdmin?: boolean;
-}> = ({ match, prediction, userId, readonly, allPredictions = [], isAdmin }) => {
+  profiles?: UserProfile[];
+}> = ({ match, prediction, userId, readonly, allPredictions = [], isAdmin, profiles = [] }) => {
   const [homeScore, setHomeScore] = useState(prediction?.homeScore?.toString() || '');
   const [awayScore, setAwayScore] = useState(prediction?.awayScore?.toString() || '');
   const [penaltyWinner, setPenaltyWinner] = useState<'home' | 'away' | undefined>(prediction?.penaltyWinner);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOthers, setShowOthers] = useState(false);
   
   // Track the values that were actually saved to Firestore
   const lastSavedValues = useRef({
@@ -1994,7 +1999,7 @@ const MatchCard: React.FC<{
                 <span className="text-theme-primary">{getPercent(stats.away)}% Uitploeg</span>
               </div>
             </div>
-            <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100 p-0.5">
+            <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100 p-0.5 mb-2">
               <div 
                 className="bg-slate-900 rounded-full transition-all duration-1000 ease-out" 
                 style={{ width: `${getPercent(stats.home)}%` }}
@@ -2008,6 +2013,68 @@ const MatchCard: React.FC<{
                 style={{ width: `${getPercent(stats.away)}%` }}
               />
             </div>
+
+            <button
+              onClick={() => setShowOthers(!showOthers)}
+              className="text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-theme-primary transition-colors flex items-center gap-1.5 mt-4"
+            >
+              {showOthers ? 'Verberg alle voorspellingen' : 'Toon alle voorspellingen'}
+              <span className="text-[8px] opacity-75">({matchPredictions.length})</span>
+            </button>
+
+            {showOthers && (
+              <div className="mt-4 grid gap-2 max-h-60 overflow-y-auto pr-2 animate-in fade-in duration-300">
+                {matchPredictions.map(pred => {
+                  const profile = profiles.find(p => p.uid === pred.userId);
+                  const displayName = profile?.displayName || 'Onbekende speler';
+                  const avatarUrl = profile?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+                  const isCurrentUser = pred.userId === userId;
+
+                  return (
+                    <div 
+                      key={pred.id}
+                      className={cn(
+                        "flex items-center justify-between p-2.5 rounded-xl border text-xs",
+                        isCurrentUser 
+                          ? "bg-theme-primary/10 border-theme-primary/30 text-slate-950 font-extrabold" 
+                          : "bg-slate-50 border-slate-100 text-slate-700 font-bold"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <img 
+                          src={avatarUrl} 
+                          alt={displayName} 
+                          className="w-5 h-5 rounded-full border border-white bg-white"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className={cn(isCurrentUser ? "text-slate-900 font-extrabold" : "text-slate-700")}>
+                          {displayName} {isCurrentUser && <span className="text-[9px] text-theme-primary font-black ml-0.5">(jij)</span>}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-slate-900 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm text-xs">
+                          {pred.homeScore} - {pred.awayScore}
+                        </span>
+                        {pred.homeScore === pred.awayScore && match.allowPenalties && pred.penaltyWinner && (
+                          <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-500">
+                            <span className="text-[7px] uppercase mr-0.5">Pen:</span>
+                            <TeamFlag team={pred.penaltyWinner === 'home' ? match.homeTeam : match.awayTeam} size={10} />
+                          </div>
+                        )}
+                        {pred.pointsEarned !== undefined && match.status === 'finished' && (
+                          <span className={cn(
+                            "ml-1 px-1.5 py-0.5 rounded font-black text-[10px]",
+                            pred.pointsEarned > 0 ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"
+                          )}>
+                            +{pred.pointsEarned} pt
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
