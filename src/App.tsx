@@ -1771,8 +1771,16 @@ const MatchCard: React.FC<{
       console.error('Error saving prediction:', err);
       let displayMessage = 'Fout bij het opslaan';
       
-      if (err.message && err.message.includes('permission-denied')) {
-        displayMessage = 'Geen toestemming om op te slaan (Firewall/Security Rules)';
+      const errMsg = err.message ? err.message.toLowerCase() : '';
+      const errCode = err.code ? err.code.toLowerCase() : '';
+      
+      if (
+        errCode === 'permission-denied' || 
+        errMsg.includes('permission-denied') || 
+        errMsg.includes('permission') || 
+        errMsg.includes('insufficient')
+      ) {
+        displayMessage = 'Geen toestemming. De wedstrijd is waarschijnlijk al begonnen of de deadline is verstreken.';
       } else if (err.message) {
         displayMessage = `Fout: ${err.message}`;
       }

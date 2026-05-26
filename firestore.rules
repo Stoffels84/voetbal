@@ -133,10 +133,10 @@ service cloud.firestore {
       return data.uid is string && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
         (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
-        data.totalPoints is number &&
+        (data.totalPoints is int || data.totalPoints is float) &&
         (!('favoriteTeam' in data) || data.favoriteTeam is string) &&
         (!('avatarUrl' in data) || data.avatarUrl is string) &&
-        (!('previousRank' in data) || data.previousRank is number) &&
+        (!('previousRank' in data) || data.previousRank is int) &&
         (!('rankHistory' in data) || data.rankHistory is list) &&
         (!('topScorer' in data) || data.topScorer is string) &&
         (!('stats' in data) || data.stats is map) &&
@@ -153,10 +153,10 @@ service cloud.firestore {
         data.status in ['scheduled', 'finished'] &&
         (!('type' in data) || data.type is string) &&
         (!('group' in data) || data.group == null || data.group is string) &&
-        (!('matchNumber' in data) || data.matchNumber is number) &&
-        (!('homeScore' in data) || data.homeScore == null || data.homeScore is number) &&
-        (!('awayScore' in data) || data.awayScore == null || data.awayScore is number) &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number) &&
+        (!('matchNumber' in data) || data.matchNumber is int) &&
+        (!('homeScore' in data) || data.homeScore == null || data.homeScore is int) &&
+        (!('awayScore' in data) || data.awayScore == null || data.awayScore is int) &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is int) &&
         (!('allowPenalties' in data) || data.allowPenalties is bool) &&
         (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']);
     }
@@ -167,29 +167,29 @@ service cloud.firestore {
         data.createdBy is string && data.createdBy == request.auth.uid &&
         data.inviteCode is string && data.inviteCode.size() > 0 &&
         data.createdAt is timestamp &&
-        data.memberCount is number;
+        data.memberCount is int;
     }
 
     function isValidLeagueMember(data) {
       return data.id is string && data.leagueId is string && data.userId is string && data.userId == request.auth.uid &&
-        data.joinedAt is timestamp && data.displayName is string && data.totalPoints is number &&
+        data.joinedAt is timestamp && data.displayName is string && (data.totalPoints is int || data.totalPoints is float) &&
         (!('lastOnline' in data) || data.lastOnline == null || data.lastOnline is timestamp);
     }
 
     function isValidPrediction(data) {
       return data.userId is string && (data.userId == request.auth.uid || isAdmin()) &&
         data.matchId is string &&
-        (data.homeScore is number || data.homeScore is string) &&
-        (data.awayScore is number || data.awayScore is string) &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is number || data.firstGoalMinute is string) &&
+        (data.homeScore is int || data.homeScore is float || data.homeScore is string) &&
+        (data.awayScore is int || data.awayScore is float || data.awayScore is string) &&
+        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is int || data.firstGoalMinute is string) &&
         (!('id' in data) || data.id is string) &&
-        (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is number) &&
+        (!('pointsEarned' in data) || data.pointsEarned == null || data.pointsEarned is int || data.pointsEarned is float) &&
         (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away', '']);
     }
 
     function isValidBonusQuestion(data) {
       return data.question is string && data.question.size() > 0 &&
-        data.points is number && data.points >= 0 &&
+        (data.points is int || data.points is float) && data.points >= 0 &&
         data.deadline is string &&
         data.status in ['open', 'closed', 'finished'];
     }
@@ -198,7 +198,7 @@ service cloud.firestore {
       return data.userId is string && data.userId == request.auth.uid &&
         data.questionId is string &&
         data.answer is string && data.answer.size() > 0 &&
-        (!('pointsEarned' in data) || data.pointsEarned is number);
+        (!('pointsEarned' in data) || data.pointsEarned is int || data.pointsEarned is float);
     }
 
     function isValidMessage(data) {
@@ -216,7 +216,7 @@ service cloud.firestore {
 
     function isValidPollVote(data) {
       return data.userId is string && data.userId == request.auth.uid &&
-        data.pollId is string && data.optionIndex is number;
+        data.pollId is string && data.optionIndex is int;
     }
 
     function isValidNotification(data) {
@@ -229,7 +229,7 @@ service cloud.firestore {
     function isValidTournamentSettings(data) {
       return hasOnlyAllowedFields(['officialTopScorer', 'topScorerPoints', 'topScorerAwarded']) &&
         (!('officialTopScorer' in data) || data.officialTopScorer is string) &&
-        (!('topScorerPoints' in data) || data.topScorerPoints is number) &&
+        (!('topScorerPoints' in data) || data.topScorerPoints is int || data.topScorerPoints is float) &&
         (!('topScorerAwarded' in data) || data.topScorerAwarded is bool);
     }
 
@@ -262,14 +262,8 @@ service cloud.firestore {
       let matchPath = /databases/$(database)/documents/matches/$(matchId);
       return exists(matchPath) && 
              'date' in get(matchPath).data &&
-             (
-               (get(matchPath).data.date is timestamp && request.time < get(matchPath).data.date) ||
-               (get(matchPath).data.date is string && 
-                get(matchPath).data.date != '' &&
-                get(matchPath).data.date.matches("^\\d{4}-\\d{2}-\\d{2}.*") &&
-                request.time < timestamp(get(matchPath).data.date.matches(".*(Z|[+-]\\d{2}:\\d{2})$") ? get(matchPath).data.date : get(matchPath).data.date + 'Z')
-               )
-             );
+             get(matchPath).data.date != '' &&
+             request.time < timestamp(get(matchPath).data.date);
     }
 
     match /predictions/{predictionId} {
