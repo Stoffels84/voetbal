@@ -263,7 +263,7 @@ service cloud.firestore {
       return exists(matchPath) && 
              'date' in get(matchPath).data &&
              get(matchPath).data.date != '' &&
-             request.time < timestamp(get(matchPath).data.date);
+             request.time < timestamp(get(matchPath).data.date.matches(".*(Z|[+-]\\d{2}:\\d{2})$") ? get(matchPath).data.date : get(matchPath).data.date + 'Z');
     }
 
     match /predictions/{predictionId} {
