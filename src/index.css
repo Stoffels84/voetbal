@@ -15,7 +15,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased min-h-screen relative overflow-x-hidden;
+    @apply bg-[#FAF8EB] text-slate-900 antialiased min-h-screen relative overflow-x-hidden;
   }
   
   body::before {

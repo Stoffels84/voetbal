@@ -1117,7 +1117,7 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+      <div className="min-h-screen flex items-center justify-center bg-[#FAF8EB]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-delijn-yellow"></div>
       </div>
     );
@@ -1125,7 +1125,7 @@ function AppContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-stone-50 p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF8EB] p-6">
         <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-stone-100">
           <div className="bg-delijn-yellow/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
             <Trophy className="text-delijn-black" size={32} />
@@ -1242,7 +1242,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-32">
+    <div className="min-h-screen bg-[#FAF8EB] text-slate-900 font-sans pb-32">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-40">
         <div className="w-full px-6 h-20 flex items-center justify-between">
