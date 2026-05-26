@@ -27,6 +27,18 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API Route to receive client diagnostics logs
+  app.post("/api/log", (req, res) => {
+    const logData = req.body;
+    try {
+      fs.appendFileSync(path.join(process.cwd(), "client_errors.log"), JSON.stringify({ timestamp: new Date().toISOString(), ...logData }, null, 2) + "\n---\n");
+      console.log("Client log received:", logData);
+    } catch (e) {
+      console.error("Failed to write log file:", e);
+    }
+    res.json({ success: true });
+  });
+
   // API Route to delete a user from Firebase Auth
   app.post("/api/admin/delete-user", async (req, res) => {
     const { userId } = req.body;
