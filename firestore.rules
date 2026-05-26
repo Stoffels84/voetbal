@@ -262,8 +262,9 @@ service cloud.firestore {
       let matchPath = /databases/$(database)/documents/matches/$(matchId);
       return exists(matchPath) && 
              'date' in get(matchPath).data &&
-             get(matchPath).data.date != '' &&
-             request.time < timestamp(get(matchPath).data.date.matches(".*(Z|[+-]\\d{2}:\\d{2})$") ? get(matchPath).data.date : get(matchPath).data.date + 'Z');
+             get(matchPath).data.date is string &&
+             get(matchPath).data.date.size() >= 16 &&
+             request.time < timestamp(get(matchPath).data.date[0:16] + ":00Z");
     }
 
     match /predictions/{predictionId} {
