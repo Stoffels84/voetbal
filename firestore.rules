@@ -273,13 +273,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
                       (isAdmin() || (
-                        isBeforeMatchDeadline(request.resource.data.matchId) &&
                         isValidPrediction(request.resource.data) &&
                         predictionId == request.resource.data.id
                       ));
       allow update: if isAuthenticated() && 
                       (isAdmin() || (
-                        isBeforeMatchDeadline(resource.data.matchId) &&
                         resource.data.userId == request.auth.uid && 
                         isValidPrediction(request.resource.data) &&
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'matchId', 'id'])
