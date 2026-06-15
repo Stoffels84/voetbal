@@ -269,20 +269,31 @@ service cloud.firestore {
              request.time < timestamp(get(matchPath).data.date[0:10] + "T" + get(matchPath).data.date[11:16] + ":00Z");
     }
 
+    function isBeforeMatchOneHourDeadline(matchId) {
+      let matchPath = /databases/$(database)/documents/matches/$(matchId);
+      return exists(matchPath) && 
+             'date' in get(matchPath).data &&
+             get(matchPath).data.date is string &&
+             get(matchPath).data.date.size() >= 16 &&
+             request.time < timestamp(get(matchPath).data.date[0:10] + "T" + get(matchPath).data.date[11:16] + ":00Z") - duration.value(1, 'h');
+    }
+
     match /predictions/{predictionId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
+                      isBeforeMatchOneHourDeadline(request.resource.data.matchId) &&
                       (isAdmin() || (
                         isValidPrediction(request.resource.data) &&
                         predictionId == request.resource.data.id
                       ));
       allow update: if isAuthenticated() && 
+                      isBeforeMatchOneHourDeadline(resource.data.matchId) &&
                       (isAdmin() || (
                         resource.data.userId == request.auth.uid && 
                         isValidPrediction(request.resource.data) &&
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'matchId', 'id'])
                       ));
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if (isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid)) && isBeforeMatchOneHourDeadline(resource.data.matchId);
     }
 
     match /bonusQuestions/{questionId} {

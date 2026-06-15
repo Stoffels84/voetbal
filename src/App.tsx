@@ -1723,7 +1723,7 @@ const MatchCard: React.FC<{
     }
   }, [prediction, saving, showSuccess]);
 
-  const isLocked = false;
+  const isLocked = new Date().getTime() > (new Date(match.date).getTime() - 60 * 60 * 1000);
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
   const totalPredictions = matchPredictions.length;
