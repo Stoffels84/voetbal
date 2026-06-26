@@ -27,7 +27,7 @@ export interface Match {
   allowPenalties?: boolean;
   penaltyWinner?: 'home' | 'away';
   status: 'scheduled' | 'finished';
-  type?: 'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
+  type?: 'group' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
   group?: string;
   matchNumber?: number; // For bracket positioning
 }

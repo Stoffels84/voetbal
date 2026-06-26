@@ -2779,8 +2779,17 @@ function AdminView({
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
   const [date, setDate] = useState('');
-  const [matchType, setMatchType] = useState<'group' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'>('group');
+  const [matchType, setMatchType] = useState<'group' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'>('group');
   const [group, setGroup] = useState('');
+  const [allowPenalties, setAllowPenalties] = useState(false);
+
+  useEffect(() => {
+    if (matchType !== 'group') {
+      setAllowPenalties(true);
+    } else {
+      setAllowPenalties(false);
+    }
+  }, [matchType]);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -2915,6 +2924,7 @@ function AdminView({
         status: 'scheduled' as const,
         type: matchType,
         group: matchType === 'group' ? group.trim() : null,
+        allowPenalties: allowPenalties,
       };
       const docRef = doc(collection(db, 'matches'));
       await setDoc(docRef, { id: docRef.id, ...matchData });
@@ -2924,6 +2934,7 @@ function AdminView({
       setDate('');
       setMatchType('group');
       setGroup('');
+      setAllowPenalties(false);
       setSuccess('Match succesvol toegevoegd!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -3446,6 +3457,7 @@ function AdminView({
                     className="w-full bg-stone-50 border border-stone-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-delijn-yellow"
                   >
                     <option value="group">Groepsfase</option>
+                    <option value="round_of_32">16de Finale</option>
                     <option value="round_of_16">Achtste Finale</option>
                     <option value="quarter_final">Kwartfinale</option>
                     <option value="semi_final">Halve Finale</option>
@@ -3464,6 +3476,23 @@ function AdminView({
                     />
                   </div>
                 )}
+                <div className="sm:col-span-2 flex items-center gap-3 p-3 bg-stone-50 border border-stone-200 rounded-xl mt-2">
+                  <input 
+                    type="checkbox"
+                    id="allowPenalties"
+                    checked={allowPenalties}
+                    onChange={e => setAllowPenalties(e.target.checked)}
+                    className="w-5 h-5 text-delijn-yellow border-stone-300 rounded focus:ring-delijn-yellow cursor-pointer"
+                  />
+                  <div className="flex flex-col">
+                    <label htmlFor="allowPenalties" className="text-xs font-extrabold text-stone-800 uppercase cursor-pointer select-none">
+                      Penalty's mogelijk
+                    </label>
+                    <span className="text-[10px] text-stone-400">
+                      Vink aan als de match beslist kan worden met strafschoppen (bijv. in knock-out fases)
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-stone-500 font-bold">Annuleren</button>
@@ -3742,7 +3771,17 @@ const AdminMatchCard: React.FC<{
               {format(new Date(match.date), 'd MMM yyyy HH:mm')}
               {match.type && (
                 <span className="ml-2 text-delijn-black bg-stone-100 px-2 py-0.5 rounded text-[10px]">
-                  {match.type === 'group' ? `Groep ${match.group}` : match.type.replace(/_/g, ' ').toUpperCase()}
+                  {(() => {
+                    if (match.type === 'group') return `Groep ${match.group}`;
+                    const labels: Record<string, string> = {
+                      round_of_32: '16de Finale',
+                      round_of_16: 'Achtste Finale',
+                      quarter_final: 'Kwartfinale',
+                      semi_final: 'Halve Finale',
+                      final: 'Finale'
+                    };
+                    return (labels[match.type] || match.type.replace(/_/g, ' ').toUpperCase()).toUpperCase();
+                  })()}
                 </span>
               )}
               <button 
