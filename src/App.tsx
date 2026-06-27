@@ -2653,7 +2653,85 @@ function calculateStandings(matches: Match[]): Record<string, TeamStanding[]> {
 
 function TournamentStandingsView({ matches }: { matches: Match[] }) {
   const [activeSubTab, setActiveSubTab] = useState<'groups' | 'knockout'>('groups');
+  const [activeRound, setActiveRound] = useState<'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'>('round_of_32');
   const standings = useMemo(() => calculateStandings(matches), [matches]);
+
+  const knockoutMatches = useMemo(() => {
+    return matches.filter(m => m.type !== 'group');
+  }, [matches]);
+
+  const roundPlaceholders = {
+    round_of_32: [
+      { id: 'p32_1', homeTeam: 'Winnaar Groep A', awayTeam: '3e Groep C/D/I', date: '16de Finale 1' },
+      { id: 'p32_2', homeTeam: 'Runner-up Groep B', awayTeam: 'Runner-up Groep F', date: '16de Finale 2' },
+      { id: 'p32_3', homeTeam: 'Winnaar Groep C', awayTeam: '3e Groep A/B/F', date: '16de Finale 3' },
+      { id: 'p32_4', homeTeam: 'Runner-up Groep A', awayTeam: 'Runner-up Groep C', date: '16de Finale 4' },
+      { id: 'p32_5', homeTeam: 'Winnaar Groep D', awayTeam: '3e Groep B/F/K', date: '16de Finale 5' },
+      { id: 'p32_6', homeTeam: 'Runner-up Groep D', awayTeam: 'Runner-up Groep E', date: '16de Finale 6' },
+      { id: 'p32_7', homeTeam: 'Winnaar Groep E', awayTeam: 'Runner-up Groep H', date: '16de Finale 7' },
+      { id: 'p32_8', homeTeam: 'Winnaar Groep F', awayTeam: '3e Groep G/H/I', date: '16de Finale 8' },
+      { id: 'p32_9', homeTeam: 'Winnaar Groep G', awayTeam: '3e Groep I/J/K', date: '16de Finale 9' },
+      { id: 'p32_10', homeTeam: 'Runner-up Groep G', awayTeam: 'Runner-up Groep I', date: '16de Finale 10' },
+      { id: 'p32_11', homeTeam: 'Winnaar Groep H', awayTeam: 'Runner-up Groep J', date: '16de Finale 11' },
+      { id: 'p32_12', homeTeam: 'Winnaar Groep I', awayTeam: '3e Groep A/B/C', date: '16de Finale 12' },
+      { id: 'p32_13', homeTeam: 'Winnaar Groep J', awayTeam: 'Runner-up Groep K', date: '16de Finale 13' },
+      { id: 'p32_14', homeTeam: 'Runner-up Groep L', awayTeam: 'Runner-up Groep E', date: '16de Finale 14' },
+      { id: 'p32_15', homeTeam: 'Winnaar Groep K', awayTeam: '3e E/F/G', date: '16de Finale 15' },
+      { id: 'p32_16', homeTeam: 'Winnaar Groep L', awayTeam: '3e H/I/J', date: '16de Finale 16' },
+    ],
+    round_of_16: [
+      { id: 'p1', homeTeam: 'Winnaar 16de 1', awayTeam: 'Winnaar 16de 2', date: 'Achtste Finale 1' },
+      { id: 'p2', homeTeam: 'Winnaar 16de 3', awayTeam: 'Winnaar 16de 4', date: 'Achtste Finale 2' },
+      { id: 'p3', homeTeam: 'Winnaar 16de 5', awayTeam: 'Winnaar 16de 6', date: 'Achtste Finale 3' },
+      { id: 'p4', homeTeam: 'Winnaar 16de 7', awayTeam: 'Winnaar 16de 8', date: 'Achtste Finale 4' },
+      { id: 'p5', homeTeam: 'Winnaar 16de 9', awayTeam: 'Winnaar 16de 10', date: 'Achtste Finale 5' },
+      { id: 'p6', homeTeam: 'Winnaar 16de 11', awayTeam: 'Winnaar 16de 12', date: 'Achtste Finale 6' },
+      { id: 'p7', homeTeam: 'Winnaar 16de 13', awayTeam: 'Winnaar 16de 14', date: 'Achtste Finale 7' },
+      { id: 'p8', homeTeam: 'Winnaar 16de 15', awayTeam: 'Winnaar 16de 16', date: 'Achtste Finale 8' },
+    ],
+    quarter_final: [
+      { id: 'p1', homeTeam: 'Winnaar Achtste 1', awayTeam: 'Winnaar Achtste 2', date: 'Kwartfinale 1' },
+      { id: 'p2', homeTeam: 'Winnaar Achtste 3', awayTeam: 'Winnaar Achtste 4', date: 'Kwartfinale 2' },
+      { id: 'p3', homeTeam: 'Winnaar Achtste 5', awayTeam: 'Winnaar Achtste 6', date: 'Kwartfinale 3' },
+      { id: 'p4', homeTeam: 'Winnaar Achtste 7', awayTeam: 'Winnaar Achtste 8', date: 'Kwartfinale 4' },
+    ],
+    semi_final: [
+      { id: 'p1', homeTeam: 'Winnaar Kwartfinale 1', awayTeam: 'Winnaar Kwartfinale 2', date: 'Halve Finale 1' },
+      { id: 'p2', homeTeam: 'Winnaar Kwartfinale 3', awayTeam: 'Winnaar Kwartfinale 4', date: 'Halve Finale 2' },
+    ],
+    final: [
+      { id: 'p1', homeTeam: 'Winnaar Halve Finale 1', awayTeam: 'Winnaar Halve Finale 2', date: 'Finale' },
+    ],
+  };
+
+  const displayedMatches = useMemo(() => {
+    const dbMatches = knockoutMatches.filter(m => m.type === activeRound);
+    const placeholders = roundPlaceholders[activeRound];
+    
+    // We mix dbMatches and placeholders to show a complete round
+    const result = [...dbMatches];
+    const missingCount = placeholders.length - dbMatches.length;
+    
+    if (missingCount > 0) {
+      const startIdx = dbMatches.length;
+      for (let i = startIdx; i < placeholders.length; i++) {
+        result.push({
+          id: placeholders[i].id,
+          homeTeam: placeholders[i].homeTeam,
+          awayTeam: placeholders[i].awayTeam,
+          date: new Date().toISOString(), // dummy date
+          status: 'scheduled',
+          type: activeRound,
+          allowPenalties: true,
+          group: null,
+          isPlaceholder: true,
+          customDateLabel: placeholders[i].date
+        } as any);
+      }
+    }
+    
+    return result;
+  }, [knockoutMatches, activeRound]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -2749,12 +2827,143 @@ function TournamentStandingsView({ matches }: { matches: Match[] }) {
         })}
       </div>
       ) : (
-        <div className="glass-card rounded-[2.5rem] p-12 text-center border-2 border-slate-50">
-          <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-            <PieChart className="text-slate-300" size={32} />
+        <div className="space-y-8">
+          {/* Round Selector */}
+          <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100/80 backdrop-blur-md rounded-3xl w-fit">
+            {(Object.keys(roundPlaceholders) as Array<keyof typeof roundPlaceholders>).map((roundKey) => {
+              const label = roundKey === 'round_of_32' ? '16de' :
+                            roundKey === 'round_of_16' ? 'Achtste' :
+                            roundKey === 'quarter_final' ? 'Kwart' :
+                            roundKey === 'semi_final' ? 'Halve' : 'Finale';
+              return (
+                <button
+                  key={roundKey}
+                  onClick={() => setActiveRound(roundKey)}
+                  className={cn(
+                    "px-5 py-2 rounded-2xl text-[10px] font-extrabold uppercase tracking-wider transition-all",
+                    activeRound === roundKey 
+                      ? "bg-delijn-black text-white shadow-md" 
+                      : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-          <h3 className="text-xl font-black text-slate-900 font-display uppercase tracking-tight mb-2">Bracket volgt binnenkort</h3>
-          <p className="text-sm font-bold text-slate-400 max-w-xs mx-auto">De knock-outfase wordt zichtbaar zodra de groepsfase is afgerond.</p>
+
+          {/* Bracket / Matches Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {displayedMatches.map((match: any, index: number) => {
+              const isReal = !match.isPlaceholder;
+              const hasScore = match.homeScore !== undefined && match.awayScore !== undefined;
+              
+              return (
+                <div 
+                  key={match.id} 
+                  className={cn(
+                    "glass-card rounded-[2rem] p-5 flex flex-col justify-between border-2 transition-all duration-300 relative overflow-hidden group hover:scale-[1.02] hover:shadow-lg",
+                    isReal ? "border-slate-100 bg-white" : "border-dashed border-slate-200 bg-slate-50/50 opacity-75"
+                  )}
+                >
+                  {/* Card Header / Date label */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                      {isReal ? format(new Date(match.date), 'd MMM yyyy HH:mm') : match.customDateLabel}
+                    </span>
+                    {isReal ? (
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider",
+                        match.status === 'finished' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700 animate-pulse"
+                      )}>
+                        {match.status === 'finished' ? 'Gespeeld' : 'Live'}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-slate-100 text-slate-400">
+                        Gepland
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Competitors */}
+                  <div className="space-y-3 my-2">
+                    {/* Home Team */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-100">
+                          {isReal ? (
+                            <TeamFlag team={match.homeTeam} size={18} />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-400">?</div>
+                          )}
+                        </div>
+                        <span className={cn(
+                          "text-xs font-bold",
+                          match.status === 'finished' && match.homeScore < match.awayScore ? "text-slate-400 font-medium" : "text-slate-800"
+                        )}>
+                          {match.homeTeam}
+                        </span>
+                      </div>
+                      {hasScore && (
+                        <span className={cn(
+                          "text-sm font-black",
+                          match.status === 'finished' && match.homeScore < match.awayScore ? "text-slate-400" : "text-slate-900"
+                        )}>
+                          {match.homeScore}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Away Team */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-100">
+                          {isReal ? (
+                            <TeamFlag team={match.awayTeam} size={18} />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-400">?</div>
+                          )}
+                        </div>
+                        <span className={cn(
+                          "text-xs font-bold",
+                          match.status === 'finished' && match.awayScore < match.homeScore ? "text-slate-400 font-medium" : "text-slate-800"
+                        )}>
+                          {match.awayTeam}
+                        </span>
+                      </div>
+                      {hasScore && (
+                        <span className={cn(
+                          "text-sm font-black",
+                          match.status === 'finished' && match.awayScore < match.homeScore ? "text-slate-400" : "text-slate-900"
+                        )}>
+                          {match.awayScore}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Penalty details if draw & allowPenalties */}
+                  {isReal && match.homeScore === match.awayScore && match.allowPenalties && match.penaltyWinner && (
+                    <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between bg-slate-50/50 p-2 rounded-xl">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Na Penalty's:</span>
+                      <div className="flex items-center gap-1.5">
+                        <TeamFlag team={match.penaltyWinner === 'home' ? match.homeTeam : match.awayTeam} size={12} />
+                        <span className="text-[10px] font-extrabold text-slate-700">
+                          {match.penaltyWinner === 'home' ? match.homeTeam : match.awayTeam} wint
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isReal && (
+                    <div className="mt-3 pt-2 border-t border-dashed border-slate-100 text-center">
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Wacht op groepsfase</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
