@@ -1724,6 +1724,7 @@ const MatchCard: React.FC<{
   }, [prediction, saving, showSuccess]);
 
   const isLocked = new Date().getTime() > (new Date(match.date).getTime() - 60 * 60 * 1000);
+  const shouldHideOthers = match.hideOthersPredictions && !isLocked && !isAdmin;
 
   const matchPredictions = allPredictions.filter(p => p.matchId === match.id);
   const totalPredictions = matchPredictions.length;
@@ -1986,12 +1987,26 @@ const MatchCard: React.FC<{
           </div>
         )}
 
-        {totalPredictions > 0 && (
+        {match.hideOthersPredictions && !isLocked && (
+          <div className="pt-6 border-t border-slate-100 flex items-center gap-3 text-slate-400 bg-slate-50/50 p-4 rounded-[1.5rem] border border-dashed border-slate-200">
+            <Lock size={16} className="text-slate-400 shrink-0" />
+            <p className="text-[10px] font-bold uppercase tracking-wider leading-relaxed">
+              Voorspellingen van anderen zijn verborgen voor deze {match.type === 'semi_final' ? 'halve finale' : match.type === 'final' ? 'finale' : 'wedstrijd'} tot 1 uur voor de aftrap.
+            </p>
+          </div>
+        )}
+
+        {totalPredictions > 0 && !shouldHideOthers && (
           <div className="pt-6 border-t border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                 <BarChart3 size={14} className="text-theme-primary" />
                 Onze stelplaats ({totalPredictions})
+                {match.hideOthersPredictions && !isLocked && (
+                  <span className="bg-amber-100 text-amber-800 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
+                    Verborgen voor spelers
+                  </span>
+                )}
               </p>
               <div className="flex gap-3 text-[9px] font-black uppercase tracking-widest">
                 <span className="text-slate-900">{getPercent(stats.home)}% Thuis</span>
@@ -2991,12 +3006,18 @@ function AdminView({
   const [matchType, setMatchType] = useState<'group' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final'>('group');
   const [group, setGroup] = useState('');
   const [allowPenalties, setAllowPenalties] = useState(false);
+  const [hideOthersPredictions, setHideOthersPredictions] = useState(false);
 
   useEffect(() => {
     if (matchType !== 'group') {
       setAllowPenalties(true);
     } else {
       setAllowPenalties(false);
+    }
+    if (matchType === 'semi_final' || matchType === 'final') {
+      setHideOthersPredictions(true);
+    } else {
+      setHideOthersPredictions(false);
     }
   }, [matchType]);
   const [saving, setSaving] = useState(false);
@@ -3134,6 +3155,7 @@ function AdminView({
         type: matchType,
         group: matchType === 'group' ? group.trim() : null,
         allowPenalties: allowPenalties,
+        hideOthersPredictions: hideOthersPredictions,
       };
       const docRef = doc(collection(db, 'matches'));
       await setDoc(docRef, { id: docRef.id, ...matchData });
@@ -3144,6 +3166,7 @@ function AdminView({
       setMatchType('group');
       setGroup('');
       setAllowPenalties(false);
+      setHideOthersPredictions(false);
       setSuccess('Match succesvol toegevoegd!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -3702,6 +3725,24 @@ function AdminView({
                     </span>
                   </div>
                 </div>
+
+                <div className="sm:col-span-2 flex items-center gap-3 p-3 bg-stone-50 border border-stone-200 rounded-xl mt-2">
+                  <input 
+                    type="checkbox"
+                    id="hideOthersPredictions"
+                    checked={hideOthersPredictions}
+                    onChange={e => setHideOthersPredictions(e.target.checked)}
+                    className="w-5 h-5 text-delijn-yellow border-stone-300 rounded focus:ring-delijn-yellow cursor-pointer"
+                  />
+                  <div className="flex flex-col">
+                    <label htmlFor="hideOthersPredictions" className="text-xs font-extrabold text-stone-800 uppercase cursor-pointer select-none">
+                      Prognoses van anderen verbergen
+                    </label>
+                    <span className="text-[10px] text-stone-400">
+                      Vink aan om de voorspellingen van andere spelers te verbergen tot 1 uur voor de wedstrijd begint
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-stone-500 font-bold">Annuleren</button>
@@ -3890,6 +3931,16 @@ const AdminMatchCard: React.FC<{
   const [editAway, setEditAway] = useState(match.awayTeam);
   const [editDate, setEditDate] = useState(new Date(match.date).toISOString().slice(0, 16));
   const [editAllowPenalties, setEditAllowPenalties] = useState(match.allowPenalties || false);
+  const [editHideOthersPredictions, setEditHideOthersPredictions] = useState(match.hideOthersPredictions || false);
+
+  // Sync state if match changes
+  useEffect(() => {
+    setEditHome(match.homeTeam);
+    setEditAway(match.awayTeam);
+    setEditDate(new Date(match.date).toISOString().slice(0, 16));
+    setEditAllowPenalties(match.allowPenalties || false);
+    setEditHideOthersPredictions(match.hideOthersPredictions || false);
+  }, [match]);
 
   const handleUpdate = async () => {
     if (h === '' || a === '') return;
@@ -3908,7 +3959,8 @@ const AdminMatchCard: React.FC<{
         homeTeam: editHome,
         awayTeam: editAway,
         date: new Date(editDate).toISOString(),
-        allowPenalties: editAllowPenalties
+        allowPenalties: editAllowPenalties,
+        hideOthersPredictions: editHideOthersPredictions
       });
       setIsEditing(false);
     } finally {
@@ -3955,9 +4007,19 @@ const AdminMatchCard: React.FC<{
                 id={`penalties-${match.id}`}
                 checked={editAllowPenalties}
                 onChange={e => setEditAllowPenalties(e.target.checked)}
-                className="w-4 h-4 rounded border-stone-300 text-delijn-black focus:ring-delijn-yellow"
+                className="w-4 h-4 rounded border-stone-300 text-delijn-black focus:ring-delijn-yellow cursor-pointer"
               />
-              <label htmlFor={`penalties-${match.id}`} className="text-[10px] font-bold text-stone-600 uppercase">Strafschoppen mogelijk</label>
+              <label htmlFor={`penalties-${match.id}`} className="text-[10px] font-bold text-stone-600 uppercase cursor-pointer select-none">Strafschoppen mogelijk</label>
+            </div>
+            <div className="flex items-center gap-2 px-1">
+              <input 
+                type="checkbox"
+                id={`hidePredictions-${match.id}`}
+                checked={editHideOthersPredictions}
+                onChange={e => setEditHideOthersPredictions(e.target.checked)}
+                className="w-4 h-4 rounded border-stone-300 text-delijn-black focus:ring-delijn-yellow cursor-pointer"
+              />
+              <label htmlFor={`hidePredictions-${match.id}`} className="text-[10px] font-bold text-stone-600 uppercase cursor-pointer select-none">Prognoses van anderen verbergen</label>
             </div>
             <div className="flex gap-2">
               <button 

@@ -30,6 +30,7 @@ export interface Match {
   type?: 'group' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
   group?: string;
   matchNumber?: number; // For bracket positioning
+  hideOthersPredictions?: boolean;
 }
 
 export interface Prediction {
