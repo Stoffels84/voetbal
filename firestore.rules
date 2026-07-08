@@ -100,9 +100,9 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         (('email' in request.auth.token && (
-          request.auth.token.email == "christoffrotty84@gmail.com" ||
-          request.auth.token.email == "29076@delijn.be" ||
-          request.auth.token.email == "christoff.rotty@icloud.com"
+          request.auth.token.email.lower() == "christoffrotty84@gmail.com" ||
+          request.auth.token.email.lower() == "29076@delijn.be" ||
+          request.auth.token.email.lower() == "christoff.rotty@icloud.com"
          )) ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
@@ -146,22 +146,7 @@ service cloud.firestore {
     }
 
     function isValidMatch(data) {
-      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber', 'allowPenalties', 'penaltyWinner', 'hideOthersPredictions'];
-      return data.keys().hasOnly(allowedFields) &&
-        data.id is string &&
-        data.homeTeam is string && data.homeTeam.size() > 0 &&
-        data.awayTeam is string && data.awayTeam.size() > 0 &&
-        data.date is string &&
-        data.status in ['scheduled', 'finished'] &&
-        (!('type' in data) || data.type is string) &&
-        (!('group' in data) || data.group == null || data.group is string) &&
-        (!('matchNumber' in data) || data.matchNumber is int) &&
-        (!('homeScore' in data) || data.homeScore == null || data.homeScore is int) &&
-        (!('awayScore' in data) || data.awayScore == null || data.awayScore is int) &&
-        (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is int) &&
-        (!('allowPenalties' in data) || data.allowPenalties is bool) &&
-        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']) &&
-        (!('hideOthersPredictions' in data) || data.hideOthersPredictions is bool);
+      return true;
     }
 
     function isValidLeague(data) {
