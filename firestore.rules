@@ -146,7 +146,7 @@ service cloud.firestore {
     }
 
     function isValidMatch(data) {
-      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber', 'allowPenalties', 'penaltyWinner'];
+      let allowedFields = ['id', 'homeTeam', 'awayTeam', 'date', 'homeScore', 'awayScore', 'firstGoalMinute', 'status', 'type', 'group', 'matchNumber', 'allowPenalties', 'penaltyWinner', 'hideOthersPredictions'];
       return data.keys().hasOnly(allowedFields) &&
         data.id is string &&
         data.homeTeam is string && data.homeTeam.size() > 0 &&
@@ -160,7 +160,8 @@ service cloud.firestore {
         (!('awayScore' in data) || data.awayScore == null || data.awayScore is int) &&
         (!('firstGoalMinute' in data) || data.firstGoalMinute == null || data.firstGoalMinute is int) &&
         (!('allowPenalties' in data) || data.allowPenalties is bool) &&
-        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']);
+        (!('penaltyWinner' in data) || data.penaltyWinner == null || data.penaltyWinner in ['home', 'away']) &&
+        (!('hideOthersPredictions' in data) || data.hideOthersPredictions is bool);
     }
 
     function isValidLeague(data) {
