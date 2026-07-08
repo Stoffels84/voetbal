@@ -835,11 +835,15 @@ function AppContent() {
           }
           
           let userData: UserPrivate | null = null;
+          const emailLower = firebaseUser.email?.toLowerCase() || '';
+          const isAdminEmail = emailLower === 'christoffrotty84@gmail.com' || 
+                               emailLower === '29076@delijn.be' || 
+                               emailLower === 'christoff.rotty@icloud.com';
           if (userDoc && !userDoc.exists()) {
             userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              role: (firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be' || firebaseUser.email === 'christoff.rotty@icloud.com') ? 'admin' : 'user'
+              role: isAdminEmail ? 'admin' : 'user'
             };
             try {
               await setDoc(userDocRef, userData);
@@ -849,7 +853,7 @@ function AppContent() {
           } else if (userDoc) {
             userData = userDoc.data() as UserPrivate;
             // Force admin role if email matches but role is not admin
-            if ((firebaseUser.email === 'christoffrotty84@gmail.com' || firebaseUser.email === '29076@delijn.be' || firebaseUser.email === 'christoff.rotty@icloud.com') && userData.role !== 'admin') {
+            if (isAdminEmail && userData.role !== 'admin') {
               userData.role = 'admin';
               try {
                 await updateDoc(userDocRef, { role: 'admin' });
@@ -3093,6 +3097,35 @@ function AdminView({
     }
   };
 
+  const commitBatchInChunks = async (
+    operations: Array<{
+      type: 'update' | 'set' | 'delete';
+      ref: any;
+      data?: any;
+    }>
+  ) => {
+    let batch = writeBatch(db);
+    let count = 0;
+    for (const op of operations) {
+      if (op.type === 'update') {
+        batch.update(op.ref, op.data);
+      } else if (op.type === 'set') {
+        batch.set(op.ref, op.data);
+      } else if (op.type === 'delete') {
+        batch.delete(op.ref);
+      }
+      count++;
+      if (count >= 400) {
+        await batch.commit();
+        batch = writeBatch(db);
+        count = 0;
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+    }
+  };
+
   const handleAwardTopScorerPoints = async () => {
     if (!officialTopScorer) return;
     
@@ -3103,20 +3136,41 @@ function AdminView({
         setConfirmAction(null);
         setSaving(true);
         try {
-          const batch = writeBatch(db);
+          const operations: Array<{ type: 'update' | 'set' | 'delete'; ref: any; data?: any }> = [];
           const profilesSnapshot = await getDocs(collection(db, 'profiles'));
+          const leagueMembersSnapshot = await getDocs(collection(db, 'leagueMembers'));
           
           profilesSnapshot.docs.forEach(profileDoc => {
             const profile = profileDoc.data() as UserProfile;
             if (profile.topScorer?.toLowerCase().trim() === officialTopScorer.toLowerCase().trim()) {
-              batch.update(doc(db, 'profiles', profileDoc.id), {
-                totalPoints: (profile.totalPoints || 0) + Number(topScorerPoints)
+              const newPoints = (profile.totalPoints || 0) + Number(topScorerPoints);
+              operations.push({
+                type: 'update',
+                ref: doc(db, 'profiles', profileDoc.id),
+                data: { totalPoints: newPoints }
+              });
+
+              // Also update matching league memberships for this user
+              leagueMembersSnapshot.docs.forEach(memberDoc => {
+                const member = memberDoc.data() as LeagueMember;
+                if (member.userId === profileDoc.id) {
+                  operations.push({
+                    type: 'update',
+                    ref: memberDoc.ref,
+                    data: { totalPoints: newPoints }
+                  });
+                }
               });
             }
           });
 
-          batch.update(doc(db, 'tournamentSettings', 'results'), { topScorerAwarded: true });
-          await batch.commit();
+          operations.push({
+            type: 'update',
+            ref: doc(db, 'tournamentSettings', 'results'),
+            data: { topScorerAwarded: true }
+          });
+
+          await commitBatchInChunks(operations);
           setSuccess('Topscorer punten succesvol toegekend!');
           setTimeout(() => setSuccess(''), 3000);
         } catch (error) {
@@ -3181,15 +3235,19 @@ function AdminView({
 
   const handleUpdateResult = async (match: Match, home: number, away: number, penaltyWinner?: 'home' | 'away') => {
     try {
-      const batch = writeBatch(db);
+      const operations: Array<{ type: 'update' | 'set' | 'delete'; ref: any; data?: any }> = [];
       
       // 1. Update match
       const matchRef = doc(db, 'matches', match.id);
-      batch.update(matchRef, {
-        homeScore: home,
-        awayScore: away,
-        penaltyWinner: (home === away && match.allowPenalties) ? (penaltyWinner || null) : null,
-        status: 'finished'
+      operations.push({
+        type: 'update',
+        ref: matchRef,
+        data: {
+          homeScore: home,
+          awayScore: away,
+          penaltyWinner: (home === away && match.allowPenalties) ? (penaltyWinner || null) : null,
+          status: 'finished'
+        }
       });
 
       // 2. Calculate points for all predictions for this match
@@ -3227,22 +3285,46 @@ function AdminView({
         const delta = points - oldPoints;
 
         if (delta !== 0) {
-          batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: points });
+          operations.push({
+            type: 'update',
+            ref: doc(db, 'predictions', predDoc.id),
+            data: { pointsEarned: points }
+          });
           userPointsDelta[pred.userId] = (userPointsDelta[pred.userId] || 0) + delta;
         }
       });
 
-      // 3. Update user total points
-      for (const [userId, delta] of Object.entries(userPointsDelta)) {
-        const profileRef = doc(db, 'profiles', userId);
-        const profileDoc = await getDoc(profileRef);
-        if (profileDoc.exists()) {
-          const currentPoints = profileDoc.data().totalPoints || 0;
-          batch.update(profileRef, { totalPoints: currentPoints + delta });
+      // 3. Update user total points and league members points
+      if (Object.keys(userPointsDelta).length > 0) {
+        const leagueMembersSnapshot = await getDocs(collection(db, 'leagueMembers'));
+        for (const [userId, delta] of Object.entries(userPointsDelta)) {
+          const profileRef = doc(db, 'profiles', userId);
+          const profileDoc = await getDoc(profileRef);
+          if (profileDoc.exists()) {
+            const currentPoints = profileDoc.data().totalPoints || 0;
+            const newPoints = currentPoints + delta;
+            operations.push({
+              type: 'update',
+              ref: profileRef,
+              data: { totalPoints: newPoints }
+            });
+
+            // Update all matching league memberships for this user
+            leagueMembersSnapshot.docs.forEach(memberDoc => {
+              const member = memberDoc.data() as LeagueMember;
+              if (member.userId === userId) {
+                operations.push({
+                  type: 'update',
+                  ref: memberDoc.ref,
+                  data: { totalPoints: newPoints }
+                });
+              }
+            });
+          }
         }
       }
 
-      await batch.commit();
+      await commitBatchInChunks(operations);
       setSuccess('Uitslag opgeslagen en punten berekend!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -3262,30 +3344,46 @@ function AdminView({
         setConfirmAction(null);
         setSaving(true);
         try {
-          const batch = writeBatch(db);
+          const operations: Array<{ type: 'update' | 'set' | 'delete'; ref: any; data?: any }> = [];
           
           // 1. Reset all profiles
           const profilesSnapshot = await getDocs(collection(db, 'profiles'));
           profilesSnapshot.docs.forEach(profileDoc => {
-            batch.update(doc(db, 'profiles', profileDoc.id), { totalPoints: 0 });
+            operations.push({
+              type: 'update',
+              ref: doc(db, 'profiles', profileDoc.id),
+              data: { totalPoints: 0 }
+            });
           });
 
           // 2. Reset all predictions
           const predsSnapshot = await getDocs(collection(db, 'predictions'));
           predsSnapshot.docs.forEach(predDoc => {
-            batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: 0 });
+            operations.push({
+              type: 'update',
+              ref: doc(db, 'predictions', predDoc.id),
+              data: { pointsEarned: 0 }
+            });
           });
 
           // 3. Reset all bonus answers
           const bonusAnswersSnapshot = await getDocs(collection(db, 'bonusAnswers'));
           bonusAnswersSnapshot.docs.forEach(answerDoc => {
-            batch.update(doc(db, 'bonusAnswers', answerDoc.id), { pointsEarned: 0 });
+            operations.push({
+              type: 'update',
+              ref: doc(db, 'bonusAnswers', answerDoc.id),
+              data: { pointsEarned: 0 }
+            });
           });
 
           // 4. Reset tournament settings
-          batch.update(doc(db, 'tournamentSettings', 'results'), { topScorerAwarded: false });
+          operations.push({
+            type: 'update',
+            ref: doc(db, 'tournamentSettings', 'results'),
+            data: { topScorerAwarded: false }
+          });
 
-          await batch.commit();
+          await commitBatchInChunks(operations);
           setSuccess('Het klassement is volledig gereset!');
           setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
@@ -3312,8 +3410,9 @@ function AdminView({
           const userPoints: Record<string, number> = {};
           profilesSnapshot.docs.forEach(d => userPoints[d.id] = 0);
 
+          // 1. Calculate prediction points for finished matches
           const predsSnapshot = await getDocs(collection(db, 'predictions'));
-          const batch = writeBatch(db);
+          const operations: Array<{ type: 'update' | 'set' | 'delete'; ref: any; data?: any }> = [];
           
           predsSnapshot.docs.forEach(predDoc => {
             const pred = predDoc.data() as Prediction;
@@ -3345,15 +3444,60 @@ function AdminView({
               }
             }
             
-            batch.update(doc(db, 'predictions', predDoc.id), { pointsEarned: points });
+            if (pred.pointsEarned !== points) {
+              operations.push({
+                type: 'update',
+                ref: doc(db, 'predictions', predDoc.id),
+                data: { pointsEarned: points }
+              });
+            }
             userPoints[pred.userId] = (userPoints[pred.userId] || 0) + points;
           });
 
-          for (const [userId, points] of Object.entries(userPoints)) {
-            batch.update(doc(db, 'profiles', userId), { totalPoints: points });
+          // 2. Add points from closed bonus questions
+          const bonusAnswersSnapshot = await getDocs(collection(db, 'bonusAnswers'));
+          bonusAnswersSnapshot.docs.forEach(ansDoc => {
+            const ans = ansDoc.data() as BonusAnswer;
+            const points = ans.pointsEarned || 0;
+            if (points > 0) {
+              userPoints[ans.userId] = (userPoints[ans.userId] || 0) + points;
+            }
+          });
+
+          // 3. Add points from topscorer predictions if already awarded
+          if (tournamentSettings?.topScorerAwarded && tournamentSettings?.officialTopScorer) {
+            const officialScorer = tournamentSettings.officialTopScorer.toLowerCase().trim();
+            const tsPoints = Number(tournamentSettings.topScorerPoints || 10);
+            profilesSnapshot.docs.forEach(profileDoc => {
+              const profile = profileDoc.data() as UserProfile;
+              if (profile.topScorer?.toLowerCase().trim() === officialScorer) {
+                userPoints[profileDoc.id] = (userPoints[profileDoc.id] || 0) + tsPoints;
+              }
+            });
           }
 
-          await batch.commit();
+          // 4. Update profiles
+          for (const [userId, points] of Object.entries(userPoints)) {
+            operations.push({
+              type: 'update',
+              ref: doc(db, 'profiles', userId),
+              data: { totalPoints: points }
+            });
+          }
+
+          // 5. Update league members
+          const leagueMembersSnapshot = await getDocs(collection(db, 'leagueMembers'));
+          leagueMembersSnapshot.docs.forEach(memberDoc => {
+            const member = memberDoc.data() as LeagueMember;
+            const points = userPoints[member.userId] || 0;
+            operations.push({
+              type: 'update',
+              ref: memberDoc.ref,
+              data: { totalPoints: points }
+            });
+          });
+
+          await commitBatchInChunks(operations);
           setSuccess('Alle scores zijn opnieuw berekend!');
           setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
@@ -4778,8 +4922,19 @@ function AdminBonusQuestionsView({
           }
         });
 
-        for (const [userId, delta] of Object.entries(userPointsDelta)) {
-          batch.update(doc(db, 'profiles', userId), { totalPoints: increment(delta) });
+        if (Object.keys(userPointsDelta).length > 0) {
+          const leagueMembersSnapshot = await getDocs(collection(db, 'leagueMembers'));
+          for (const [userId, delta] of Object.entries(userPointsDelta)) {
+            batch.update(doc(db, 'profiles', userId), { totalPoints: increment(delta) });
+
+            // Update matching league memberships for this user
+            leagueMembersSnapshot.docs.forEach(memberDoc => {
+              const member = memberDoc.data() as LeagueMember;
+              if (member.userId === userId) {
+                batch.update(memberDoc.ref, { totalPoints: increment(delta) });
+              }
+            });
+          }
         }
 
         await batch.commit();
